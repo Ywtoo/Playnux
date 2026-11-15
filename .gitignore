@@ -1,0 +1,51 @@
+# Playnux .gitignore
+# Playnux is a Linux-first, Go + SQLite + Wails native gaming launcher.
+
+# ── Reference & Old Code (Not part of build/distribution) ──────────────────────
+_playnite-reference/
+
+# ── Go build artifacts & Binaries ─────────────────────────────────────────────
+bin/
+.playnux-build.mk
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+playnux
+playnux-ui
+
+# ── Go temporary & test caches ────────────────────────────────────────────────
+.freebuff/
+.playnux-preview/
+playnux_test.db*
+*.db
+*.db-wal
+*.db-shm
+
+# ── Node.js / Vite Frontend ───────────────────────────────────────────────────
+ui/frontend/node_modules/
+ui/frontend/dist/
+ui/frontend/.vite/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# ── OS & IDE specifics ────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# ── Temporary blob/dumps ──────────────────────────────────────────────────────
+*.blob
+*.log
+*.tmp
