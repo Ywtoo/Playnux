@@ -1,0 +1,25 @@
+<section data-integration-panel="igdb" hidden>
+  <h3>IGDB</h3>
+  <form class="integration-provider" data-provider="igdb">
+    <fieldset class="desktop-group">
+      <legend>Credenciais da Twitch</legend>
+      <p data-provider-state="igdb"></p>
+      <ol class="plugin-instructions">
+        <li>No portal da Twitch, registre seu aplicativo com a autenticação de dois fatores ativa.</li>
+        <li>Use <code>https://localhost</code> no redirect, escolha <strong>Application Integration</strong> e selecione <strong>Confidential</strong>.</li>
+        <li>Abra <strong>Manage</strong>, gere o segredo em <strong>New Secret</strong> e cole os dois valores abaixo.</li>
+      </ol>
+      <p><button type="button" class="ghost-button" data-help-url="https://dev.twitch.tv/console/apps">Abrir portal da Twitch…</button></p>
+      <div class="desktop-fields">
+        <label for="igdb-client">Client ID</label>
+        <input id="igdb-client" name="client" autocomplete="off" required>
+        <label for="igdb-key">Client Secret</label>
+        <input id="igdb-key" name="key" type="password" autocomplete="off" required>
+      </div>
+      <div class="desktop-actions">
+        <button type="submit" class="primary-button">Salvar</button>
+        <button type="button" class="ghost-button" data-clear-provider>Remover credenciais</button>
+      </div>
+    </fieldset>
+  </form>
+</section>

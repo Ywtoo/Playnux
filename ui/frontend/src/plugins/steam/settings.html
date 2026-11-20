@@ -1,0 +1,19 @@
+<form data-steam-account>
+  <fieldset class="desktop-group">
+    <legend>Conta Steam</legend>
+    <p>O SteamID64 importa os jogos instalados. Para carregar também os jogos comprados que não estão instalados, informe uma chave gratuita da Steam Web API (steamcommunity.com/dev/apikey).</p>
+    <div class="desktop-fields">
+      <label for="steam-id">SteamID64</label>
+      <div class="path-row">
+        <input id="steam-id" name="account" inputmode="numeric" pattern="7656119[0-9]{10}" autocomplete="off" required>
+        <button type="button" class="ghost-button" data-steam-detect>Usar deste PC</button>
+      </div>
+      <label for="steam-api-key">Chave da API (biblioteca comprada)</label>
+      <input id="steam-api-key" name="key" type="password" autocomplete="off" placeholder="Em branco mantém a chave salva">
+    </div>
+    <label class="plugin-checkbox"><input type="checkbox" name="clearKey"> Remover chave salva</label>
+    <div class="desktop-actions">
+      <button type="submit" class="primary-button">Salvar conta e atualizar</button>
+    </div>
+  </fieldset>
+</form>

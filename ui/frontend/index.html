@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+  <meta name="color-scheme" content="dark"/>
+  <title>Playnux</title>
+  <link rel="stylesheet" href="/style.css"/>
+</head>
+<body>
+  <div class="shell">
+    <header class="application-bar" aria-label="Comandos do Playnux">
+      <strong>Playnux</strong>
+      <button id="add-game" class="primary-button compact" type="button">＋ Adicionar jogo</button>
+      <button id="refresh" class="ghost-button" type="button">⚙ Configurações</button>
+      <button id="open-metadata" class="ghost-button" type="button">Metadados</button>
+      <button id="open-integrations" class="ghost-button" type="button">Plugins</button>
+      <div id="background-downloads" class="background-downloads" hidden>
+        <span role="status"></span>
+        <progress aria-label="Progresso dos downloads"></progress>
+        <button class="ghost-button compact" type="button" aria-label="Dispensar status dos downloads">×</button>
+      </div>
+    </header>
+    <aside class="sidebar">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true">P</span>
+        <div>
+          <strong>PLAYNUX</strong>
+          <span>Sua biblioteca, no Linux</span>
+        </div>
+      </div>
+
+      <nav class="filters" aria-label="Filtros da biblioteca">
+        <button class="filter is-active" data-filter="all" type="button">
+          <span class="filter-icon">▦</span> Todos os jogos <span class="filter-count" data-count="all"></span>
+        </button>
+        <button class="filter" data-filter="installed" type="button">
+          <span class="filter-icon">◉</span> Instalados <span class="filter-count" data-count="installed"></span>
+        </button>
+        <button class="filter" data-filter="favorites" type="button">
+          <span class="filter-icon">★</span> Favoritos <span class="filter-count" data-count="favorites"></span>
+        </button>
+        <button class="filter" data-filter="recent" type="button">
+          <span class="filter-icon">◷</span> Recentes <span class="filter-count" data-count="recent"></span>
+        </button>
+      </nav>
+
+      <div class="library-origin">
+        <label class="section-label" for="source-filter">Origem dos jogos</label>
+        <select id="source-filter"><option value="">Todas as origens</option></select>
+      </div>
+
+      <section class="local-sources" aria-labelledby="local-sources-title">
+        <div class="section-label" id="local-sources-title">Biblioteca local</div>
+        <button id="add-local-folder" class="source-button" type="button">
+          <span aria-hidden="true">＋</span> Escanear pasta
+        </button>
+        <button id="add-rom-folder" class="source-button" type="button">
+          <span aria-hidden="true">＋</span> Pasta de ROMs
+        </button>
+      </section>
+
+      <div class="sidebar-foot">
+        <span class="sleep-dot" aria-hidden="true"></span>
+        <p><strong>Deep Sleep</strong><br/>A UI é congelada enquanto você joga.</p>
+      </div>
+    </aside>
+
+    <main class="workspace">
+      <header class="topbar">
+        <label class="search" for="search">
+          <span aria-hidden="true">⌕</span>
+          <input id="search" type="search" placeholder="Buscar na biblioteca…" autocomplete="off" spellcheck="false"/>
+          <kbd>/</kbd>
+        </label>
+        <div class="toolbar">
+          <div class="view-switch" role="group" aria-label="Modo de visualização">
+            <button class="view-mode is-active" data-view-mode="details" type="button">Detalhes</button>
+            <button class="view-mode" data-view-mode="grid" type="button">Grade</button>
+          </div>
+          <button id="big-picture-open" class="ghost-button" type="button" title="Abrir Big Picture">
+            ⛶ <span>Big Picture</span>
+          </button>
+        </div>
+      </header>
+
+      <section id="details-view" class="details-view" aria-label="Visualização de detalhes">
+        <aside class="details-list-panel">
+          <div class="details-list-head">
+            <span>JOGOS</span>
+            <span id="details-count" class="count">—</span>
+          </div>
+          <div id="details-list" class="details-list"></div>
+        </aside>
+
+        <article id="details-hero" class="details-hero is-empty">
+          <div class="hero-media">
+            <img id="details-bg" alt="" />
+            <div class="hero-shade"></div>
+          </div>
+          <div class="hero-placeholder" id="details-placeholder">
+            <span class="hero-placeholder-mark">P</span>
+            <h1>Selecione um jogo</h1>
+            <p>Escolha um título na lista à esquerda para ver capa, trailer e detalhes.</p>
+          </div>
+          <div class="hero-body" id="details-body">
+            <div class="hero-art">
+              <img id="details-logo" alt="" hidden />
+              <h1 id="details-title">—</h1>
+            </div>
+            <div class="hero-actions">
+              <button id="details-play" class="play-button" type="button">▶ JOGAR</button>
+              <button id="details-launch-options" class="ghost-button compact" type="button">Propriedades…</button>
+              <button id="details-trailer" class="ghost-button compact" type="button" hidden>▶ Trailer</button>
+            </div>
+            <div class="game-information">
+              <section class="game-about" aria-labelledby="details-about-title">
+                <h2 id="details-about-title">Sobre o jogo</h2>
+                <p id="details-description" class="game-synopsis"></p>
+                <div id="details-tags" class="game-tag-section" hidden></div>
+                <div id="details-trailer-player" class="trailer-player" hidden></div>
+              </section>
+              <div class="game-facts">
+                <div id="details-facts"></div>
+              </div>
+            </div>
+          </div>
+        </article>
+      </section>
+
+      <section id="grid-view" class="grid-view" hidden>
+        <div class="library-head">
+          <div>
+            <span class="eyebrow">BIBLIOTECA</span>
+            <h1 id="section-title">Todos os jogos</h1>
+          </div>
+          <div class="library-tools">
+            <label class="zoom-control" for="grid-zoom">
+              Zoom <input id="grid-zoom" type="range" min="130" max="240" step="10" value="170"/>
+            </label>
+            <span id="game-count" class="game-count">—</span>
+          </div>
+        </div>
+
+        <section id="game-grid" class="game-grid" aria-live="polite" aria-busy="false"></section>
+
+        <section id="empty" class="empty" hidden>
+          <div class="empty-mark" aria-hidden="true">P</div>
+          <h2 id="empty-title">Sua biblioteca está vazia</h2>
+          <p id="empty-text">Adicione um jogo ou conecte uma loja para começar.</p>
+          <button id="empty-action" class="primary-button" type="button">Adicionar jogo</button>
+        </section>
+
+        <div id="skeleton" class="skeleton-grid" aria-hidden="true"></div>
+      </section>
+    </main>
+  </div>
+
+  <aside id="drawer" class="drawer" aria-hidden="true" aria-labelledby="drawer-title">
+    <div class="drawer-backdrop" data-close-drawer></div>
+    <article class="drawer-panel" role="dialog" aria-modal="true">
+      <button class="icon-button drawer-close" type="button" data-close-drawer aria-label="Fechar detalhes">×</button>
+      <div id="drawer-art" class="drawer-art">
+        <img id="drawer-cover" alt="" />
+        <div class="drawer-art-fallback" aria-hidden="true"><span id="drawer-initial">P</span></div>
+      </div>
+      <div class="drawer-body">
+        <span id="drawer-source" class="source-badge"></span>
+        <h2 id="drawer-title">—</h2>
+        <div class="drawer-actions">
+          <button id="drawer-play" class="play-button" type="button"><span aria-hidden="true">▶</span> Jogar</button>
+          <button id="drawer-launch-options" class="ghost-button compact" type="button">Propriedades…</button>
+          <span id="drawer-installed" class="installed-note"></span>
+        </div>
+        <div id="drawer-trailer" class="drawer-trailer" hidden>
+          <button id="drawer-trailer-play" class="trailer-button" type="button">
+            <span aria-hidden="true">▶</span> Assistir trailer
+          </button>
+          <div id="drawer-trailer-player" class="trailer-player" hidden></div>
+        </div>
+        <div class="game-information">
+          <section class="game-about" aria-labelledby="drawer-about-title">
+            <h3 id="drawer-about-title">Sobre o jogo</h3>
+            <p id="drawer-description" class="game-synopsis"></p>
+            <div id="drawer-tags" class="game-tag-section" hidden></div>
+          </section>
+          <div class="game-facts">
+            <div id="drawer-facts"></div>
+          </div>
+        </div>
+      </div>
+    </article>
+  </aside>
+
+  <dialog id="integrations-dialog" class="dialog desktop-dialog integrations-dialog" aria-labelledby="integrations-title">
+    <header class="desktop-title">
+      <h2 id="integrations-title">Configurações</h2>
+      <button type="button" class="desktop-close" id="integrations-close" aria-label="Fechar">×</button>
+    </header>
+    <div class="integrations-layout">
+      <nav class="integration-tree" aria-label="Configurações do Playnux">
+        <h3 id="integration-general-label">Biblioteca</h3>
+        <button type="button" data-integration-panel-link="library">Visão geral e unificação</button>
+        <div id="integration-stores" role="group" aria-labelledby="integration-general-label"></div>
+        <h3 id="integration-metadata-label">Metadados</h3>
+        <button type="button" id="integration-metadata-settings">Prioridade e download</button>
+        <h3 id="integration-emulation-label">Emuladores</h3>
+        <button type="button" data-integration-panel-link="emulation">Detecção e perfis</button>
+        <h3 id="integration-appearance-label">Aparência</h3>
+        <button type="button" data-integration-panel-link="appearance">Temas e desempenho</button>
+        <h3 id="integration-providers-label">Plugins</h3>
+        <div id="integration-providers" role="group" aria-labelledby="integration-providers-label"></div>
+      </nav>
+      <div class="integrations-content" id="integration-content">
+        <section data-integration-panel="appearance" hidden>
+          <h3>Aparência e desempenho</h3>
+          <fieldset class="desktop-group">
+            <legend>Tema</legend>
+            <label class="field" for="appearance-theme">Tema base
+              <select id="appearance-theme">
+                <option value="theme-playnite-dark">Playnite Dark</option>
+                <option value="theme-steam">Steam</option>
+              </select>
+            </label>
+            <label class="field" for="appearance-view">Visualização padrão
+              <select id="appearance-view">
+                <option value="details">Detalhes</option>
+                <option value="grid">Grade</option>
+              </select>
+            </label>
+            <p>O Big Picture continua disponível pelo botão no topo ou pela tecla de tela cheia.</p>
+          </fieldset>
+          <fieldset class="desktop-group">
+            <legend>Desempenho</legend>
+            <label class="plugin-checkbox"><input id="appearance-transitions" type="checkbox"> Efeitos de transição e animações</label>
+            <p>Desligue para reduzir o uso de CPU em máquinas modestas. As telas passam a trocar instantaneamente.</p>
+            <label class="plugin-checkbox"><input id="appearance-gpu" type="checkbox"> Aceleração de GPU na WebView</label>
+            <p>A mudança de GPU é aplicada ao reiniciar o Playnux.</p>
+            <p id="appearance-status" class="properties-status" role="status"></p>
+            <div class="desktop-actions">
+              <button type="button" class="primary-button" id="appearance-save">Salvar aparência</button>
+            </div>
+          </fieldset>
+        </section>
+        <section data-integration-panel="library" hidden>
+          <h3>Biblioteca</h3>
+          <fieldset class="desktop-group">
+            <legend>Unificar jogos</legend>
+            <label class="plugin-checkbox"><input id="library-unify" type="checkbox"> Unificar jogos com o mesmo nome</label>
+            <p>Jogos de PC com o mesmo título (Steam, GOG, Epic, Linux) viram um cartão só. A primeira loja da lista define capa, banner e ao lançar. Você pode trocar as imagens em Propriedades → Imagens.</p>
+            <ol id="library-priority" class="metadata-sources" aria-label="Prioridade das lojas"></ol>
+            <p id="library-status" class="properties-status" role="status"></p>
+            <div class="desktop-actions">
+              <button type="button" class="ghost-button" id="library-save">Salvar preferências</button>
+            </div>
+          </fieldset>
+          <fieldset class="desktop-group">
+            <legend>Adicionar e remover</legend>
+            <p>Adicione aplicativos detectados no sistema, um executável ou uma pasta. Limpar a biblioteca apaga todos os jogos e as fontes locais.</p>
+            <div class="desktop-actions">
+              <button type="button" class="ghost-button" id="library-add-game">＋ Adicionar jogo…</button>
+              <button type="button" class="ghost-button danger-button" id="library-clear">Limpar biblioteca…</button>
+            </div>
+          </fieldset>
+        </section>
+        <section data-integration-panel="emulation" hidden>
+          <h3>Emuladores e perfis</h3>
+          <p class="properties-note">O Playnux detecta emuladores no PATH e via Flatpak. Cada perfil define extensões, plataforma e o modelo de argumentos (<code>{ImagePath}</code> ou <code>%ROM%</code>).</p>
+          <div id="emulation-list" class="emulation-list" aria-live="polite"></div>
+          <fieldset class="desktop-group">
+            <legend>Escanear uma pasta de ROMs</legend>
+            <p>Escolha a pasta e o perfil. A pasta fica salva e as próximas sincronizações usam o mesmo perfil.</p>
+            <label class="field" for="emulation-folder">Pasta
+              <input id="emulation-folder" type="text" placeholder="~/ROMs/ps2" autocomplete="off" spellcheck="false">
+            </label>
+            <label class="field" for="emulation-profile">Perfil
+              <select id="emulation-profile"></select>
+            </label>
+            <div class="desktop-actions">
+              <button type="button" class="ghost-button" id="emulation-scan">Escanear ROMs</button>
+            </div>
+            <p id="emulation-status" class="properties-status" role="status"></p>
+          </fieldset>
+          <fieldset class="desktop-group">
+            <legend>Adicionar emulador manualmente</legend>
+            <form id="emulator-form" class="emulator-form">
+              <div class="emulator-grid">
+                <label class="field">Nome
+                  <input id="emulator-name" type="text" required maxlength="120" placeholder="Meu emulador">
+                </label>
+                <label class="field">Executável (PATH)
+                  <input id="emulator-executable" type="text" placeholder="/usr/bin/emulador">
+                </label>
+                <label class="field">Ou Flatpak ID
+                  <input id="emulator-flatpak" type="text" placeholder="org.exemplo.Emulador">
+                </label>
+                <label class="field">Perfil
+                  <input id="emulator-profile-name" type="text" required placeholder="Rápido / Fullscreen">
+                </label>
+                <label class="field">Plataforma
+                  <input id="emulator-platform" type="text" required placeholder="PlayStation 2">
+                </label>
+                <label class="field">Extensões
+                  <input id="emulator-extensions" type="text" required placeholder="iso, chd, bin">
+                </label>
+                <label class="field field-wide">Argumentos
+                  <input id="emulator-args" type="text" value="&#34;{ImagePath}&#34;" spellcheck="false">
+                </label>
+              </div>
+              <div class="desktop-actions">
+                <button type="submit" class="primary-button">Salvar emulador</button>
+              </div>
+              <p id="emulator-status" class="properties-status" role="status"></p>
+            </form>
+          </fieldset>
+        </section>
+        <section data-integration-panel="stores">
+          <h3 id="integration-store-name">Bibliotecas</h3>
+          <fieldset class="desktop-group">
+            <legend>Importação</legend>
+            <dl class="desktop-properties" id="integration-store-properties"></dl>
+            <div class="desktop-actions" id="integration-store-actions"></div>
+          </fieldset>
+          <div id="integration-store-config"></div>
+        </section>
+      </div>
+    </div>
+    <footer class="desktop-footer">
+      <p id="integrations-status" role="status"></p>
+      <button type="button" class="ghost-button" id="sync-libraries">Atualizar todas</button>
+      <button type="button" class="ghost-button" id="integrations-done">Fechar</button>
+    </footer>
+  </dialog>
+
+  <dialog id="metadata-dialog" class="dialog desktop-dialog metadata-dialog" aria-labelledby="metadata-title">
+    <header class="desktop-title">
+      <h2 id="metadata-title">Download de metadados</h2>
+      <button type="button" class="desktop-close" id="metadata-close" aria-label="Fechar">×</button>
+    </header>
+    <form id="metadata-policy">
+      <div class="metadata-content">
+        <fieldset class="desktop-group metadata-scope">
+          <legend>Jogos para atualizar</legend>
+          <label><input type="radio" name="scope" value="selected"> Jogo selecionado</label>
+          <label><input type="radio" name="scope" value="filtered"> Jogos da visualização atual</label>
+          <label><input type="radio" name="scope" value="all"> Toda a biblioteca</label>
+        </fieldset>
+        <fieldset class="desktop-group">
+          <legend>Prioridade das fontes</legend>
+          <p>A primeira fonte que tiver o dado tem prioridade. As seguintes completam o que faltar.</p>
+          <ol id="metadata-sources" class="metadata-sources"></ol>
+        </fieldset>
+        <fieldset class="desktop-group metadata-scope">
+          <legend>Dados existentes</legend>
+          <label><input type="radio" name="metadata-mode" value="missing" checked> Preencher apenas o que falta</label>
+          <label><input type="radio" name="metadata-mode" value="replace"> Substituir tudo</label>
+          <p>Campos sem valor nas fontes selecionadas são preservados.</p>
+        </fieldset>
+        <label class="metadata-auto"><input id="metadata-auto" type="checkbox"> Buscar metadados automaticamente ao importar jogos novos</label>
+      </div>
+      <footer class="desktop-footer">
+        <p id="metadata-status" role="status"></p>
+        <button type="button" class="ghost-button" id="metadata-save">Salvar padrão</button>
+        <button type="submit" class="primary-button">Baixar e salvar padrão</button>
+        <button type="button" class="ghost-button" id="metadata-done">Fechar</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <dialog id="game-properties" class="dialog desktop-dialog properties-dialog" aria-labelledby="properties-title">
+    <header class="desktop-title">
+      <h2 id="properties-title">Propriedades</h2>
+      <button type="button" class="desktop-close" id="properties-close" aria-label="Fechar">×</button>
+    </header>
+    <div class="properties-shell">
+      <div class="properties-heading">
+        <img id="properties-cover" alt="">
+        <div>
+          <h3 id="properties-game-name">—</h3>
+          <p id="properties-game-meta"></p>
+          <span id="properties-runtime-badge" class="runtime-badge" hidden></span>
+        </div>
+      </div>
+      <nav class="properties-tabs" role="tablist" aria-label="Seções das propriedades">
+        <button type="button" role="tab" data-properties-tab="general" aria-current="page">Geral</button>
+        <button type="button" role="tab" data-properties-tab="artwork">Imagens</button>
+        <button type="button" role="tab" data-properties-tab="launch">Inicialização</button>
+      </nav>
+      <div class="properties-body">
+        <section class="properties-panel" data-properties-panel="general" role="tabpanel">
+          <form id="general-form" class="properties-form">
+            <div class="general-grid">
+              <label class="field field-wide" for="general-name">Nome
+                <input id="general-name" type="text" maxlength="300" required>
+              </label>
+              <label class="field" for="general-release">Lançamento
+                <input id="general-release" type="date">
+              </label>
+              <label class="field" for="general-version">Versão
+                <input id="general-version" type="text" maxlength="100">
+              </label>
+              <label class="field" for="general-critic">Nota da crítica
+                <input id="general-critic" type="number" min="0" max="100" placeholder="0–100">
+              </label>
+              <label class="field" for="general-community">Nota da comunidade
+                <input id="general-community" type="number" min="0" max="100" placeholder="0–100">
+              </label>
+              <label class="field" for="general-user">Sua nota
+                <input id="general-user" type="number" min="0" max="100" placeholder="0–100">
+              </label>
+              <label class="field field-wide" for="general-trailer">Trailer (URL)
+                <input id="general-trailer" type="url" maxlength="500" placeholder="https://www.youtube.com/watch?v=…">
+              </label>
+              <label class="field field-wide" for="general-description">Sinopse
+                <textarea id="general-description" rows="5" maxlength="20000"></textarea>
+              </label>
+              <label class="field" for="general-genres">Gêneros
+                <input id="general-genres" type="text" placeholder="Ação, Aventura">
+              </label>
+              <label class="field" for="general-developers">Desenvolvedoras
+                <input id="general-developers" type="text" placeholder="Team Cherry">
+              </label>
+              <label class="field" for="general-publishers">Distribuidoras
+                <input id="general-publishers" type="text">
+              </label>
+              <label class="field" for="general-platforms">Plataformas
+                <input id="general-platforms" type="text" placeholder="PC (Windows), Linux">
+              </label>
+              <label class="field" for="general-tags">Tags
+                <input id="general-tags" type="text">
+              </label>
+              <label class="field" for="general-categories">Categorias
+                <input id="general-categories" type="text">
+              </label>
+              <label class="field field-wide" for="general-features">Recursos
+                <input id="general-features" type="text" placeholder="Um jogador, Co-op, Controle">
+              </label>
+            </div>
+            <p class="properties-note">Listas são separadas por vírgula. As plataformas acima podem ser corrigidas manualmente quando um provedor trouxer uma versão de outro console.</p>
+            <div class="properties-actions">
+              <label class="field inline-field" for="general-metadata-mode">Provedores
+                <select id="general-metadata-mode">
+                  <option value="missing">Preencher o que falta</option>
+                  <option value="replace">Substituir metadados</option>
+                </select>
+              </label>
+              <button id="general-fetch" type="button" class="ghost-button">Buscar dos provedores</button>
+              <button type="submit" class="primary-button">Salvar metadados</button>
+            </div>
+            <p id="general-status" class="properties-status" role="status"></p>
+          </form>
+        </section>
+
+        <section class="properties-panel" data-properties-panel="artwork" role="tabpanel" hidden>
+          <form id="artwork-form" class="properties-form">
+            <p class="properties-note">Escolha qual imagem editar, busque no SteamGridDB/Google ou envie um arquivo de até 3 MB.</p>
+            <div class="artwork-slots" role="group" aria-label="Imagens atuais">
+              <div class="artwork-slot">
+                <div class="artwork-current"><img data-current-art="cover" alt="" hidden><span>Sem imagem</span></div>
+                <button type="button" class="ghost-button" data-artwork-field="cover" aria-label="Buscar capa">Capa</button>
+              </div>
+              <div class="artwork-slot">
+                <div class="artwork-current"><img data-current-art="background" alt="" hidden><span>Sem imagem</span></div>
+                <button type="button" class="ghost-button" data-artwork-field="background" aria-label="Buscar banner">Banner</button>
+              </div>
+              <div class="artwork-slot">
+                <div class="artwork-current"><img data-current-art="logo" alt="" hidden><span>Sem imagem</span></div>
+                <button type="button" class="ghost-button" data-artwork-field="logo" aria-label="Buscar logotipo">Logotipo</button>
+              </div>
+              <div class="artwork-slot">
+                <div class="artwork-current"><img data-current-art="icon" alt="" hidden><span>Sem imagem</span></div>
+                <button type="button" class="ghost-button" data-artwork-field="icon" aria-label="Buscar ícone">Ícone</button>
+              </div>
+            </div>
+            <fieldset class="desktop-group artwork-variant-group" id="artwork-variant-field" hidden>
+              <legend>Imagens da loja</legend>
+              <p class="properties-note">Este título está unificado. Escolha de qual origem vêm capa, banner, logotipo e ícone em destaque.</p>
+              <div class="artwork-search-controls">
+                <label class="field">Origem
+                  <select id="artwork-variant"></select>
+                </label>
+                <button id="artwork-use-variant" type="button" class="primary-button">Usar imagens desta origem</button>
+              </div>
+            </fieldset>
+            <fieldset class="desktop-group artwork-search">
+              <legend id="artwork-search-title">Buscar imagem</legend>
+              <div class="artwork-search-controls">
+                <label class="field">Fonte
+                  <select id="artwork-source">
+                    <option value="steamgriddb">SteamGridDB</option>
+                    <option value="google">Google Imagens</option>
+                  </select>
+                </label>
+                <label class="field">Buscar
+                  <input id="artwork-query" type="search" maxlength="160" autocomplete="off">
+                </label>
+                <button id="artwork-search" type="button" class="primary-button">Buscar</button>
+              </div>
+              <div class="desktop-actions">
+                <button id="artwork-browser" type="button" class="ghost-button" hidden>Abrir Google Imagens…</button>
+                <button id="artwork-steamgriddb" type="button" class="ghost-button">Usar melhor pontuada</button>
+              </div>
+              <div id="artwork-results" aria-label="Resultados da busca"></div>
+            </fieldset>
+            <div class="artwork-replacement">
+              <img id="artwork-preview" alt="Prévia da imagem escolhida" hidden>
+              <label class="field">Ou escolher arquivo
+                <input type="file" id="artwork-file" accept="image/png,image/jpeg,image/gif">
+              </label>
+            </div>
+            <p id="artwork-status" class="properties-status" role="status"></p>
+            <div class="properties-actions">
+              <button type="submit" class="primary-button">Aplicar imagem</button>
+            </div>
+          </form>
+        </section>
+
+        <section class="properties-panel" data-properties-panel="launch" role="tabpanel" hidden>
+          <form id="launch-form" class="properties-form">
+            <p id="launch-provider" class="dialog-hint"></p>
+            <dl id="launch-runtime" class="desktop-properties" hidden></dl>
+            <fieldset id="launch-local-settings" class="desktop-group">
+              <legend>Compatibilidade e argumentos</legend>
+              <label class="field" for="launch-runner">Motor de compatibilidade
+                <select id="launch-runner"></select>
+              </label>
+              <label class="field" for="launch-directory">Diretório de trabalho
+                <input id="launch-directory" type="text" autocomplete="off">
+              </label>
+              <label class="field" for="launch-arguments">Argumentos adicionais, um por linha
+                <textarea id="launch-arguments" rows="3" spellcheck="false"></textarea>
+              </label>
+              <div class="command-preview">
+                <span>Comando que será executado</span>
+                <code id="launch-command">—</code>
+              </div>
+              <p id="launch-runner-hint" class="properties-note"></p>
+            </fieldset>
+            <p id="launch-status" class="properties-status" role="status"></p>
+            <div class="properties-actions">
+              <button id="launch-protondb" type="button" class="ghost-button">Relatos no ProtonDB…</button>
+              <button id="launch-save" type="submit" class="primary-button">Salvar inicialização</button>
+            </div>
+          </form>
+        </section>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog id="manual-dialog" class="dialog" aria-labelledby="manual-title">
+    <form id="manual-form" method="dialog">
+      <span class="eyebrow">ADICIONAR JOGO</span>
+      <h2 id="manual-title">Adicionar à biblioteca</h2>
+      <fieldset class="desktop-group apps-fieldset">
+        <legend>Apps detectados no sistema</legend>
+        <p class="dialog-hint">Marque os aplicativos que devem entrar na biblioteca. Nada é adicionado automaticamente.</p>
+        <div class="apps-toolbar">
+          <input id="apps-search" type="search" placeholder="Filtrar apps…" autocomplete="off"/>
+          <button id="apps-refresh" class="ghost-button" type="button">Atualizar</button>
+        </div>
+        <div id="apps-list" class="apps-list" aria-live="polite"></div>
+        <div class="dialog-actions">
+          <button id="apps-add" class="primary-button" type="button" disabled>Adicionar selecionados</button>
+        </div>
+      </fieldset>
+      <h3 class="manual-divider">Ou adicione manualmente</h3>
+      <p class="dialog-hint">Escolha um executável local (.sh, .x86_64, .AppImage ou .exe via Wine). O jogo entra na biblioteca sem login.</p>
+      <label class="field" for="manual-path">
+        <span>Executável</span>
+        <div class="path-row">
+          <input id="manual-path" type="text" placeholder="/home/voce/Games/jogo/jogo.sh" autocomplete="off" spellcheck="false"/>
+          <button id="manual-pick" class="ghost-button" type="button">Procurar…</button>
+        </div>
+      </label>
+      <label class="field" for="manual-name">
+        <span>Nome (opcional)</span>
+        <input id="manual-name" type="text" placeholder="Nome exibido na biblioteca" autocomplete="off"/>
+      </label>
+      <p id="manual-error" class="form-error" hidden></p>
+      <div class="dialog-actions">
+        <button id="manual-cancel" class="ghost-button" type="button">Cancelar</button>
+        <button id="manual-submit" class="primary-button" type="submit">Adicionar jogo</button>
+      </div>
+      <button id="manual-scan-folder" class="link-button" type="button">Ou escanear uma pasta inteira de jogos</button>
+    </form>
+  </dialog>
+
+  <dialog id="folder-dialog" class="dialog" aria-labelledby="folder-title">
+    <form id="folder-form" method="dialog">
+      <span class="eyebrow">BIBLIOTECA LOCAL</span>
+      <h2 id="folder-title">Adicionar pasta</h2>
+      <p id="folder-hint" class="dialog-hint"></p>
+      <label class="field" for="folder-path">
+        <span>Caminho</span>
+        <input id="folder-path" type="text" placeholder="~/Games" autocomplete="off" spellcheck="false"/>
+      </label>
+      <div id="folder-list" class="folder-list"></div>
+      <div class="dialog-actions">
+        <button id="folder-cancel" class="ghost-button" type="button">Cancelar</button>
+        <button id="folder-submit" class="primary-button" type="submit">Adicionar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <section id="big-picture" class="big-picture" aria-hidden="true" aria-label="Big Picture">
+    <img id="big-bg" class="big-bg" alt="" />
+    <div id="big-video" class="big-video" hidden></div>
+    <div class="big-overlay"></div>
+    <header class="big-top">
+      <div class="big-brand">PLAYNUX <span>BIG PICTURE</span></div>
+      <button id="big-close" class="big-close" type="button">✕ Sair</button>
+    </header>
+    <div class="big-content">
+      <span id="big-source" class="big-source"></span>
+      <img id="big-logo" class="big-logo" alt="" hidden />
+      <h1 id="big-title">—</h1>
+      <p id="big-meta" class="big-meta"></p>
+      <button id="big-play" class="big-play" type="button">▶ JOGAR</button>
+    </div>
+    <div class="big-bottom">
+      <div id="big-carousel" class="big-carousel"></div>
+      <div class="big-hint">← → navegar · Enter jogar · Esc sair · controle: D-Pad / A</div>
+    </div>
+  </section>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <div id="sleep-overlay" class="sleep-overlay" aria-hidden="true">
+    <div class="sleep-content">
+      <span class="sleep-pulse" aria-hidden="true"></span>
+      <span class="eyebrow">DEEP SLEEP ATIVO</span>
+      <h2 id="sleep-game">Jogo em execução</h2>
+      <p>A biblioteca foi congelada e a memória liberada. Bom jogo.</p>
+    </div>
+  </div>
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>

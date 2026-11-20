@@ -1,0 +1,24 @@
+<section data-integration-panel="steamgriddb" hidden>
+  <h3>SteamGridDB</h3>
+  <form class="integration-provider" data-provider="steamgriddb">
+    <fieldset class="desktop-group">
+      <legend>Credenciais do SteamGridDB</legend>
+      <p data-provider-state="steamgriddb"></p>
+      <p>Seleção automática por maior pontuação (Score Old). Para capas, o formato 600 × 900 tem prioridade.</p>
+      <ol class="plugin-instructions">
+        <li>Abra as preferências da API e entre na sua conta SteamGridDB.</li>
+        <li>Gere uma chave pessoal de API e copie o valor.</li>
+        <li>Cole a chave abaixo e clique em Salvar.</li>
+      </ol>
+      <p><button type="button" class="ghost-button" data-help-url="https://www.steamgriddb.com/profile/preferences/api">Abrir página da chave…</button></p>
+      <div class="desktop-fields">
+        <label for="steamgrid-key">Chave da API</label>
+        <input id="steamgrid-key" name="key" type="password" autocomplete="off" required>
+      </div>
+      <div class="desktop-actions">
+        <button type="submit" class="primary-button">Salvar</button>
+        <button type="button" class="ghost-button" data-clear-provider>Remover credenciais</button>
+      </div>
+    </fieldset>
+  </form>
+</section>
