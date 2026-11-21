@@ -62,6 +62,7 @@ export function createBigPicture(options: BigPictureOptions): BigPictureControll
   const video = element<HTMLElement>(root, "#big-video");
   const carousel = element<HTMLElement>(root, "#big-carousel");
   const closeButton = element<HTMLButtonElement>(root, "#big-close");
+  const content = element<HTMLElement>(root, ".big-content");
 
   let active = false;
   let changingFullscreen = false;
@@ -179,6 +180,9 @@ export function createBigPicture(options: BigPictureOptions): BigPictureControll
 
     renderVideo(game);
     renderCarousel();
+    content.classList.remove("is-entering");
+    void content.offsetWidth;
+    content.classList.add("is-entering");
   }
 
   function move(delta: number): void {

@@ -16,7 +16,7 @@ func writeROM(t *testing.T, path string) {
 	}
 }
 
-func TestScanROMsMapsFoldersToEmulators(t *testing.T) {
+func TestScanCatalogMapsFoldersToProfiles(t *testing.T) {
 	root := t.TempDir()
 	writeROM(t, filepath.Join(root, "ps2", "Shadow of the Colossus.iso"))
 	writeROM(t, filepath.Join(root, "switch", "Zelda.nsp"))
@@ -29,43 +29,80 @@ func TestScanROMsMapsFoldersToEmulators(t *testing.T) {
 		"ryujinx":   {ID: "ryujinx", Name: "Ryujinx", FlatpakID: "io.github.ryujinx.Ryujinx"},
 		"retroarch": {ID: "retroarch", Name: "RetroArch", Binary: "/usr/bin/retroarch"},
 	}
-	games := scanROMs([]string{root}, available)
+	games := scanCatalog([]string{root}, nil, Catalog(available, nil))
 	if len(games) != 3 {
-		t.Fatalf("esperava 3 ROMs, obtive %d: %+v", len(games), games)
+		t.Fatalf("expected 3 ROMs, got %d: %+v", len(games), games)
 	}
 
 	for _, game := range games {
 		switch game.Name {
 		case "Shadow of the Colossus":
-			if game.Executable != "/usr/bin/pcsx2" {
-				t.Fatalf("PS2 executável = %q", game.Executable)
+			if game.Executable != "/usr/bin/pcsx2" || len(game.Arguments) < 2 {
+				t.Fatalf("PS2 command = %q %v", game.Executable, game.Arguments)
 			}
 		case "Zelda":
-			if game.Executable != "flatpak" || len(game.Arguments) != 3 ||
+			if game.Executable != "flatpak" || len(game.Arguments) < 3 ||
 				game.Arguments[0] != "run" || game.Arguments[1] != "io.github.ryujinx.Ryujinx" {
-				t.Fatalf("Switch comando = %q %v", game.Executable, game.Arguments)
+				t.Fatalf("Switch command = %q %v", game.Executable, game.Arguments)
 			}
 		case "Chrono Trigger":
 			if game.Executable != "/usr/bin/retroarch" {
-				t.Fatalf("SNES executável = %q", game.Executable)
+				t.Fatalf("SNES executable = %q", game.Executable)
 			}
 		default:
-			t.Fatalf("ROM inesperada: %+v", game)
+			t.Fatalf("unexpected ROM: %+v", game)
 		}
 		if len(game.Platforms) != 1 {
-			t.Fatalf("plataformas = %v", game.Platforms)
+			t.Fatalf("platforms = %v", game.Platforms)
 		}
 	}
 }
 
-func TestScanROMsAcceptsDirectSystemFolder(t *testing.T) {
+func TestScanCatalogAcceptsDirectSystemFolder(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "PS2")
 	writeROM(t, filepath.Join(root, "God of War.iso"))
-	games := scanROMs([]string{root}, map[string]Emulator{
+	catalog := Catalog(map[string]Emulator{
 		"pcsx2": {ID: "pcsx2", Name: "PCSX2", Binary: "pcsx2"},
-	})
+	}, nil)
+	games := scanCatalog([]string{root}, nil, catalog)
 	if len(games) != 1 || games[0].Name != "God of War" {
-		t.Fatalf("jogos = %+v", games)
+		t.Fatalf("games = %+v", games)
+	}
+}
+
+func TestMappedFolderUsesChosenCustomProfile(t *testing.T) {
+	root := t.TempDir()
+	writeROM(t, filepath.Join(root, "whatever", "Custom Game.bin"))
+
+	custom := EmulatorDefinition{
+		ID:         "myemu",
+		Name:       "My Emulator",
+		Executable: "/usr/bin/myemu",
+		Profiles: []EmulatorProfile{{
+			ProfileID:    "myemu:custom",
+			Name:         "My Emulator - Custom",
+			Platforms:    []string{"Custom System"},
+			Extensions:   []string{"bin"},
+			ArgsTemplate: `--rom "%ROM%" --fullscreen`,
+		}},
+	}
+	catalog := Catalog(nil, []EmulatorDefinition{custom})
+	games := scanCatalog([]string{root}, map[string]string{root: "myemu:custom"}, catalog)
+	if len(games) != 1 {
+		t.Fatalf("games = %+v", games)
+	}
+	got := games[0]
+	if got.Executable != "/usr/bin/myemu" {
+		t.Fatalf("executable = %q", got.Executable)
+	}
+	wantArgs := []string{"--rom", filepath.Join(root, "whatever", "Custom Game.bin"), "--fullscreen"}
+	if len(got.Arguments) != len(wantArgs) {
+		t.Fatalf("arguments = %v", got.Arguments)
+	}
+	for index := range wantArgs {
+		if got.Arguments[index] != wantArgs[index] {
+			t.Fatalf("arguments = %v, want %v", got.Arguments, wantArgs)
+		}
 	}
 }
 
@@ -90,13 +127,41 @@ func TestDetectorPrefersNativeThenFlatpak(t *testing.T) {
 		t.Fatalf("RetroArch = %+v", available["retroarch"])
 	}
 	if _, ok := available["rpcs3"]; ok {
-		t.Fatal("RPCS3 não deveria estar disponível")
+		t.Fatal("RPCS3 should not be available")
+	}
+}
+
+func TestNormalizeCustomValidatesProfiles(t *testing.T) {
+	if _, err := NormalizeCustom(EmulatorDefinition{ID: "x"}); err == nil {
+		t.Fatal("expected an error for a custom emulator without executable")
+	}
+	def, err := NormalizeCustom(EmulatorDefinition{
+		ID:         "My Emu",
+		Name:       "My Emulator",
+		Executable: "/usr/bin/myemu",
+		Profiles: []EmulatorProfile{{
+			Name:       "Fast",
+			Platforms:  []string{"PlayStation 2"},
+			Extensions: []string{"iso", ".CHD"},
+		}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if def.ID != "myemu" || def.Profiles[0].ProfileID != "myemu:1" {
+		t.Fatalf("normalized = %+v", def)
+	}
+	if len(def.Profiles[0].Extensions) != 2 || def.Profiles[0].Extensions[0] != ".iso" {
+		t.Fatalf("extensions = %v", def.Profiles[0].Extensions)
+	}
+	if def.Profiles[0].ArgsTemplate != `"{ImagePath}"` {
+		t.Fatalf("default template = %q", def.Profiles[0].ArgsTemplate)
 	}
 }
 
 func TestLaunchCommandReportsMissingEmulator(t *testing.T) {
 	provider := NewProvider()
 	if _, _, err := provider.LaunchCommand(nil); err == nil {
-		t.Fatal("esperava erro para jogo inválido")
+		t.Fatal("expected an error for an invalid game")
 	}
 }

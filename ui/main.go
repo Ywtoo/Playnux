@@ -6,7 +6,7 @@ import (
 	"log"
 
 	"github.com/playnux/ui/host"
-	"github.com/playnux/core/app"
+	coreapp "github.com/playnux/core/app"
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/events"
 )
@@ -17,13 +17,13 @@ import (
 var assets embed.FS
 
 func main() {
-	dbPath, err := app.DefaultDBPath()
+	dbPath, err := coreapp.DefaultDBPath()
 	if err != nil {
 		log.Fatalf("descobrir diretório de dados: %v", err)
 	}
 
 	service := host.New(nil)
-	core, err := app.New(dbPath, service, service)
+	core, err := coreapp.New(dbPath, service, service)
 	if err != nil {
 		log.Fatalf("abrir banco do Playnux em %s: %v", dbPath, err)
 	}
@@ -46,7 +46,7 @@ func main() {
 	uiSettings, err := core.UISettings(context.Background())
 	if err != nil {
 		log.Printf("ler preferências de aparência: %v", err)
-		uiSettings = app.DefaultUISettings()
+		uiSettings = coreapp.DefaultUISettings()
 	}
 	gpuPolicy := application.WebviewGpuPolicyAlways
 	if !uiSettings.GPUAcceleration {

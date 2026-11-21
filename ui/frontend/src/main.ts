@@ -4,6 +4,7 @@ import type { Game } from "../bindings/github.com/playnux/core/models/models.js"
 import type { LocalApp, StoreInfo } from "../bindings/github.com/playnux/core/app/models.js";
 import "./components/game-card";
 import type { PlaynuxGameCardElement } from "./components/game-card";
+import { applyUISettings, DEFAULT_UI_SETTINGS, type UISettingsLike } from "./appearance";
 import { createBigPicture } from "./big-picture";
 import { setupIntegrations } from "./integrations";
 import { installDeepSleep } from "./deep-sleep";
@@ -142,6 +143,7 @@ function readViewMode(): ViewMode {
 }
 
 let viewMode: ViewMode = readViewMode();
+let uiSettings: UISettingsLike = { ...DEFAULT_UI_SETTINGS, view_mode: viewMode };
 
 const bigPicture = createBigPicture({
   root: bigPictureRoot,
@@ -571,6 +573,12 @@ function renderDetails(): void {
 
   resetDetailsTrailer();
   detailsTrailer.hidden = !game.trailer_url;
+
+  // Restart the subtle hero fade when switching games without rebuilding the
+  // whole panel (keeps scrolling and focus stable).
+  detailsBody.classList.remove("is-entering");
+  void detailsBody.offsetWidth;
+  detailsBody.classList.add("is-entering");
 }
 
 function playDetailsTrailer(): void {
@@ -1024,10 +1032,14 @@ async function removeFolder(path: string): Promise<void> {
 
 // ── Eventos ─────────────────────────────────────────────────────────────────
 
-function setViewMode(mode: ViewMode): void {
+function setViewMode(mode: ViewMode, persist = true): void {
   viewMode = mode;
   localStorage.setItem("playnux:view", mode);
   renderView();
+  if (persist) {
+    uiSettings = { ...uiSettings, view_mode: mode };
+    void HostService.SaveUISettings(uiSettings).catch(() => undefined);
+  }
 }
 
 function openBigPicture(): void {
@@ -1258,6 +1270,10 @@ const integrations = setupIntegrations({
   applyDownloads: applyDownloadedGames,
   error: messageOf,
   report: showToast,
+  applyAppearance: (settings) => {
+    uiSettings = applyUISettings(settings);
+  },
+  setViewMode: (mode) => setViewMode(mode, false),
 });
 
 element("open-integrations").addEventListener("click", () => integrations.open("plugins"));
@@ -1308,8 +1324,16 @@ Events.On("library:game-menu", (event) => {
 });
 
 async function start(): Promise<void> {
-  // A varredura local não é automática: o usuário escolhe os apps no diálogo
-  // Adicionar jogo. Aqui só carregamos a biblioteca já salva.
+  // Local scanning is manual; startup only restores saved appearance and the
+  // already imported library.
+  try {
+    uiSettings = applyUISettings(await HostService.GetUISettings());
+    if (uiSettings.view_mode === "grid" || uiSettings.view_mode === "details") {
+      setViewMode(uiSettings.view_mode, false);
+    }
+  } catch {
+    applyUISettings(uiSettings);
+  }
   await reloadAll(false);
 }
 

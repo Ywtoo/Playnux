@@ -576,7 +576,7 @@ export function setupGameProperties(options: Options) {
       const loadRunners = windowsExecutable
         ? Host.GetCompatibilityRunners().then((list) => { runners = list ?? []; fillRunners(); })
         : Promise.resolve();
-      void loadRunners.then(() => Host.GetLaunchOptions(game.id)).then((settings) => {
+      void loadRunners.then(() => Host.GetLaunchOptions(target.id)).then((settings) => {
         if (game !== target || !dialog.open) return;
         directory.value = settings.directory || "";
         argumentsField.value = (settings.arguments ?? []).join("\n");

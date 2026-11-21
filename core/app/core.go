@@ -505,6 +505,19 @@ func (c *App) removeFolder(ctx context.Context, setting, path string, current []
 		return nil, err
 	}
 	apply(folders)
+	if storeID == "emulation" && c.emulation != nil {
+		mapping, mapErr := c.emulationFolderProfiles(ctx)
+		if mapErr != nil {
+			return nil, mapErr
+		}
+		if _, found := mapping[folder]; found {
+			delete(mapping, folder)
+			if err := c.saveEmulationFolderProfiles(ctx, mapping); err != nil {
+				return nil, err
+			}
+			c.emulation.SetFolderProfiles(mapping)
+		}
+	}
 
 	// Remove os cartões que pertenciam à pasta antes de sincronizar novamente.
 	source, prefix := "", ""

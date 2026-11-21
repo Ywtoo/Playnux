@@ -113,6 +113,17 @@ CREATE TABLE IF NOT EXISTS settings (
     updated_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Emuladores e perfis cadastrados manualmente pelo usuário.
+CREATE TABLE IF NOT EXISTS emulators (
+    id            TEXT PRIMARY KEY,
+    name          TEXT NOT NULL,
+    executable    TEXT NOT NULL DEFAULT '',
+    flatpak_id    TEXT NOT NULL DEFAULT '',
+    profiles_json TEXT NOT NULL DEFAULT '[]',
+    created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Metadados originais reportados pela loja.
 CREATE TABLE IF NOT EXISTS store_game_metadata (
     plugin_id TEXT NOT NULL,

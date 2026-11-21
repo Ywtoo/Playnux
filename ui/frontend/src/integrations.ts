@@ -281,7 +281,9 @@ export function setupIntegrations(options: Options) {
         Host.GetEmulationFolderProfiles(),
       ]);
       emulationCatalog = (catalog ?? []) as EmulatorDefinition[];
-      emulationFolders = folders ?? {};
+      emulationFolders = Object.fromEntries(
+        Object.entries(folders ?? {}).filter((entry): entry is [string, string] => typeof entry[1] === "string"),
+      );
       const cards = emulationCatalog.map((definition) => {
         const card = document.createElement("article");
         card.className = "emulation-card";

@@ -6,25 +6,70 @@
 }
 
 :root {
-  --bg: #0c0c0c;
-  --sidebar: #1a1a1a;
-  --panel: #262626;
-  --panel-strong: #1f1f1f;
-  --panel-soft: #373737;
-  --border: #424242;
-  --border-soft: #303030;
-  --text: #d3d3d3;
+  --bg: #0b0d12;
+  --sidebar: #14161d;
+  --panel: #1c202a;
+  --panel-strong: #171a21;
+  --panel-soft: #2a303d;
+  --border: #333a49;
+  --border-soft: #262c38;
+  --text: #cbd0dc;
   --bright: #ffffff;
-  --muted: #979797;
-  --muted-strong: #b7b7b7;
-  --accent: #ededed;
-  --accent-strong: #c4c4c4;
-  --status-active: #bababa;
-  --danger: #ff6b6b;
-  --shadow: 0 22px 60px rgba(0, 0, 0, .55);
+  --muted: #8b92a2;
+  --muted-strong: #b3bac8;
+  --accent: #9d8cff;
+  --accent-strong: #7c6bf0;
+  --status-active: #8fd6b0;
+  --danger: #ff7b8a;
+  --shadow: 0 22px 60px rgba(0, 0, 0, .6);
   --radius: 6px;
+  --card-radius: 6px;
   --card-min: 170px;
+  --font-family: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --hero-height: min(58vh, 580px);
+
+  /* Public theme aliases */
+  --bg-primary: var(--bg);
+  --bg-secondary: var(--sidebar);
+  --bg-tertiary: var(--panel);
+  --text-primary: var(--text);
+  --text-muted: var(--muted);
+  --accent-color: var(--accent);
   color-scheme: dark;
+}
+
+body[data-theme="theme-playnite-dark"] {
+  --bg: #0b0d12;
+  --sidebar: #14161d;
+  --panel: #1c202a;
+  --panel-strong: #171a21;
+  --panel-soft: #2a303d;
+  --border: #333a49;
+  --border-soft: #262c38;
+  --text: #cbd0dc;
+  --muted: #8b92a2;
+  --muted-strong: #b3bac8;
+  --accent: #9d8cff;
+  --accent-strong: #7c6bf0;
+  --status-active: #8fd6b0;
+}
+
+body[data-theme="theme-steam"] {
+  --bg: #1b2838;
+  --sidebar: #171a21;
+  --panel: #16202d;
+  --panel-strong: #121a24;
+  --panel-soft: #2a475e;
+  --border: #2f4a63;
+  --border-soft: #22364a;
+  --text: #c7d5e0;
+  --muted: #8f98a0;
+  --muted-strong: #b8c6d1;
+  --accent: #66c0f4;
+  --accent-strong: #1a9fff;
+  --status-active: #5ba32b;
+  --danger: #ff7b8a;
+  --shadow: 0 24px 60px rgba(0, 0, 0, .65);
 }
 
 * { box-sizing: border-box; }
@@ -36,8 +81,9 @@ body {
   overflow: hidden;
   background: var(--bg);
   color: var(--text);
-  font-family: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-family: var(--font-family);
   -webkit-font-smoothing: antialiased;
+  transition: background-color .25s ease, color .25s ease;
 }
 
 button, input { font: inherit; color: inherit; }
@@ -1439,3 +1485,185 @@ html[data-deep-sleep] .application-bar { visibility: hidden; }
   background-size: 14px 14px;
   background-position: 0 0, 0 7px, 7px -7px, -7px 0;
 }
+
+/* ── Theme polish: shared surfaces ──────────────────────────────────────── */
+.workspace {
+  background:
+    radial-gradient(1100px 520px at 62% -18%, color-mix(in srgb, var(--accent) 10%, transparent), transparent 62%),
+    var(--bg);
+}
+.topbar { background: var(--sidebar); border-bottom: 1px solid var(--border-soft); }
+.application-bar { background: var(--panel-strong); }
+.details-list-panel { background: var(--panel-strong); border-right-color: var(--border-soft); }
+.details-hero { background: var(--bg); }
+.details-row:hover { background: color-mix(in srgb, var(--accent) 8%, var(--panel-strong)); }
+.details-row.is-selected {
+  background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 24%, var(--panel)), var(--panel));
+  border-left-color: var(--accent);
+}
+.game-card { background: var(--panel); border-radius: var(--card-radius); }
+.game-card:hover, .game-card:focus-visible {
+  outline-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, .55);
+}
+.play-button { background: var(--accent); color: #0b0d12; }
+.play-button:hover { background: color-mix(in srgb, var(--accent) 82%, white); }
+.dialog, .desktop-dialog { background: var(--panel); border-color: var(--border); }
+.dialog::backdrop { background: rgba(4, 5, 9, .78); }
+.drawer-panel { background: var(--panel); border-left-color: var(--border); }
+.drawer-art { background: var(--panel-strong); }
+.drawer-art::after { background: linear-gradient(180deg, transparent 35%, var(--panel)); }
+.brand-mark { background: linear-gradient(135deg, var(--accent), var(--accent-strong)); color: #0b0d12; }
+.filter.is-active { background: color-mix(in srgb, var(--accent) 12%, transparent); border-left-color: var(--accent); }
+.filter.is-active .filter-icon { color: var(--accent); }
+
+body[data-theme="theme-steam"] .brand-mark { background: linear-gradient(135deg, #66c0f4, #1a9fff); }
+body[data-theme="theme-steam"] .play-button { background: linear-gradient(180deg, #75d46b, #5ba32b); color: #fff; }
+body[data-theme="theme-steam"] .play-button:hover { background: linear-gradient(180deg, #86e07b, #65b335); }
+body[data-theme="theme-steam"] .filter.is-active { background: rgba(102, 192, 244, .14); }
+body[data-theme="theme-steam"] .details-row.is-selected {
+  background: linear-gradient(90deg, rgba(102, 192, 244, .22), rgba(42, 71, 94, .3));
+}
+
+/* ── Smooth transitions ─────────────────────────────────────────────────── */
+.sidebar, .topbar, .application-bar, .details-list-panel, .game-card,
+.dialog, .drawer-panel, .source-button, .filter, .ghost-button,
+.primary-button, .play-button, .big-item, .emulation-card {
+  transition: background-color .22s ease, border-color .22s ease, color .18s ease,
+    box-shadow .2s ease, transform .18s ease;
+}
+
+@keyframes view-fade {
+  from { opacity: 0; transform: translateY(7px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes hero-fade {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes card-in {
+  from { opacity: 0; transform: translateY(8px) scale(.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes dialog-in {
+  from { opacity: 0; transform: translateY(10px) scale(.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes backdrop-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes big-in { from { opacity: 0; } to { opacity: 1; } }
+
+#details-view:not([hidden]), #grid-view:not([hidden]) {
+  animation: view-fade .3s cubic-bezier(.22, .8, .3, 1) both;
+}
+.details-hero:not(.is-empty) .hero-body,
+.hero-body.is-entering {
+  animation: hero-fade .34s cubic-bezier(.22, .8, .3, 1) backwards;
+}
+.big-content.is-entering { animation: hero-fade .32s cubic-bezier(.22, .8, .3, 1) backwards; }
+.integrations-content > section:not([hidden]) { animation: view-fade .22s ease backwards; }
+.hero-media img { transition: opacity .45s ease, transform .8s ease; }
+.hero-media img[src=""] { opacity: 0; }
+.game-grid playnux-game-card {
+  animation: card-in .34s cubic-bezier(.22, .8, .3, 1) backwards;
+}
+.game-grid playnux-game-card:nth-child(2n) { animation-delay: .018s; }
+.game-grid playnux-game-card:nth-child(3n) { animation-delay: .036s; }
+.game-grid playnux-game-card:nth-child(5n) { animation-delay: .054s; }
+.details-row { transition: background-color .16s ease, color .16s ease; }
+.dialog[open] { animation: dialog-in .22s cubic-bezier(.22, .8, .3, 1) both; }
+.dialog[open]::backdrop { animation: backdrop-in .2s ease both; }
+.big-picture.is-open { animation: big-in .28s ease both; }
+.big-bg { transition: opacity .35s ease, transform .5s ease; }
+.big-content, .big-bottom { animation: hero-fade .4s cubic-bezier(.22, .8, .3, 1) both; }
+.toast { transition: opacity .2s ease, transform .2s cubic-bezier(.22, .8, .3, 1); }
+
+/* Turn off every animation when the user disables transitions. */
+body.no-transitions *,
+body.no-transitions *::before,
+body.no-transitions *::after {
+  transition: none !important;
+  animation: none !important;
+  scroll-behavior: auto !important;
+}
+body.no-gpu .hero-media img,
+body.no-gpu .big-bg,
+body.no-gpu .big-logo,
+body.no-gpu .hero-art img {
+  filter: none !important;
+}
+
+/* ── Emulation settings ─────────────────────────────────────────────────── */
+.emulation-list {
+  display: grid;
+  gap: 7px;
+  max-height: 260px;
+  margin-bottom: 14px;
+  overflow: auto;
+  padding-right: 3px;
+}
+.emulation-card {
+  padding: 9px 11px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--panel-strong);
+}
+.emulation-card-head { display: flex; align-items: center; gap: 8px; }
+.emulation-card-head strong { margin-right: auto; font-size: 13px; }
+.emulation-state,
+.emulation-badge {
+  padding: 2px 6px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 10px;
+  line-height: 1.35;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+}
+.emulation-state.is-detected { border-color: #3d6b4f; color: #a6e3bd; background: #1b2a21; }
+.emulation-state.is-missing { color: var(--muted); }
+.emulation-badge { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
+.emulation-card-head .ghost-button { min-height: 24px; padding: 1px 8px; font-size: 11px; }
+.emulation-profiles { margin: 6px 0 0; color: var(--muted); font-size: 11px; line-height: 1.45; }
+.emulation-list h4 { margin: 8px 0 2px; font-size: 12px; color: var(--muted-strong); }
+.emulation-folder-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 9px;
+  border: 1px solid var(--border-soft);
+  border-radius: 3px;
+  background: var(--bg);
+}
+.emulation-folder-row span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted-strong);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.emulation-folder-row .ghost-button { min-height: 23px; padding: 1px 8px; font-size: 11px; }
+.emulator-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.emulator-grid .field { margin: 0; }
+.emulator-grid .field input {
+  width: 100%;
+  min-height: 28px;
+  padding: 3px 7px;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+}
+@media (max-width: 640px) {
+  .emulator-grid { grid-template-columns: 1fr; }
+}
+
+/* Selection and scrolling small polish */
+::selection { background: color-mix(in srgb, var(--accent) 45%, transparent); color: #fff; }
+html { scrollbar-color: var(--border) transparent; }
