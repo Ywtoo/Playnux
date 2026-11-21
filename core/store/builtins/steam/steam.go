@@ -135,7 +135,8 @@ var nonGameAppIDs = map[string]bool{
 var nonGameWords = []string{
 	"proton", "steam linux runtime", "steamworks common", "dedicated server",
 	"sdk", "tool", "benchmark", "editor", "authoring tools",
-	"redistributable", "soundtrack", "demo",
+	"redistributable", "soundtrack", "demo", "steamvr", "steam link",
+	"steamworks", "wallpaper engine",
 }
 
 // IsPlayableGame reports whether a Steam app should be imported automatically.

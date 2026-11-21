@@ -201,6 +201,9 @@ func findExecutable(root string) string {
 // the default; a custom runner is only used when the user explicitly selects
 // it (manual games also honour the automatic Proton mode).
 func Apply(options *launcher.Options, game *models.Game, dataDir string) error {
+	if game == nil || game.PluginID == "emulation" {
+		return nil
+	}
 	exe := WindowsExecutable(game)
 	runner := strings.TrimSpace(options.Runner)
 	protonPath := strings.TrimSpace(options.ProtonPath)

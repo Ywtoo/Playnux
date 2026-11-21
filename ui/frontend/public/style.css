@@ -52,6 +52,12 @@ body[data-theme="theme-playnite-dark"] {
   --accent: #9d8cff;
   --accent-strong: #7c6bf0;
   --status-active: #8fd6b0;
+  --bg-primary: #0b0d12;
+  --bg-secondary: #14161d;
+  --bg-tertiary: #1c202a;
+  --text-primary: #cbd0dc;
+  --text-muted: #8b92a2;
+  --accent-color: #9d8cff;
 }
 
 body[data-theme="theme-steam"] {
@@ -70,6 +76,12 @@ body[data-theme="theme-steam"] {
   --status-active: #5ba32b;
   --danger: #ff7b8a;
   --shadow: 0 24px 60px rgba(0, 0, 0, .65);
+  --bg-primary: #1b2838;
+  --bg-secondary: #171a21;
+  --bg-tertiary: #16202d;
+  --text-primary: #c7d5e0;
+  --text-muted: #8f98a0;
+  --accent-color: #66c0f4;
 }
 
 * { box-sizing: border-box; }
