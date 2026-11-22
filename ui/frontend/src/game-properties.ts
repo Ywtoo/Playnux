@@ -4,6 +4,7 @@ import type { Game } from "../bindings/github.com/playnux/core/models/models.js"
 import type { WebImage } from "../bindings/github.com/playnux/core/metadata/models.js";
 import type { ArtworkField } from "./game-information";
 import { sourceLabel } from "./format";
+import { openProtonReports } from "./plugins/protondb";
 
 export type PropertiesTab = "general" | "artwork" | "launch";
 
@@ -619,8 +620,7 @@ export function setupGameProperties(options: Options) {
   });
   proton.addEventListener("click", () => {
     if (!game) return;
-    const target = game;
-    import("./plugins/protondb").then(({ openProtonReports }) => openProtonReports(target)).catch((error) => {
+    void openProtonReports(game).catch((error) => {
       launchStatus.textContent = options.error(error);
     });
   });

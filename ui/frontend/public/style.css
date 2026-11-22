@@ -447,7 +447,7 @@ playnux-store-chip { display: block; }
   overflow-y: auto;
   background: #131313;
 }
-.hero-media { position: absolute; inset: 0 0 auto; height: min(58vh, 580px); overflow: hidden; }
+.hero-media { position: absolute; inset: 0 0 auto; height: var(--hero-height); overflow: hidden; }
 .hero-media img { width: 100%; height: 100%; object-fit: cover; opacity: .72; }
 .hero-shade {
   position: absolute;
@@ -1603,6 +1603,7 @@ body.no-gpu .big-logo,
 body.no-gpu .hero-art img {
   filter: none !important;
 }
+body.no-gpu .proton-card { backdrop-filter: none; }
 
 /* ── Emulation settings ─────────────────────────────────────────────────── */
 .emulation-list {
@@ -1679,3 +1680,88 @@ body.no-gpu .hero-art img {
 /* Selection and scrolling small polish */
 ::selection { background: color-mix(in srgb, var(--accent) 45%, transparent); color: #fff; }
 html { scrollbar-color: var(--border) transparent; }
+
+/* ── ProtonDB / anti-cheat banners ──────────────────────────────────────── */
+.compatibility-banners {
+  display: grid;
+  gap: 9px;
+  max-width: 920px;
+  margin-top: 18px;
+}
+.compatibility-banners > * { animation: hero-fade .28s cubic-bezier(.22, .8, .3, 1) backwards; }
+
+.proton-card {
+  padding: 12px 15px;
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--border));
+  border-radius: 5px;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--accent) 12%, transparent), transparent 55%),
+    color-mix(in srgb, var(--panel-strong) 88%, transparent);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .22);
+  backdrop-filter: blur(8px);
+}
+.proton-card-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.proton-brand {
+  color: var(--accent);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+}
+.proton-tier {
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 650;
+  line-height: 1.45;
+}
+.proton-tier.tier-platinum { color: #bff3ff; border-color: #4f9db3; background: rgba(61, 150, 173, .18); }
+.proton-tier.tier-gold { color: #ffe7a3; border-color: #8d7430; background: rgba(180, 142, 40, .18); }
+.proton-tier.tier-silver { color: #dbe4ee; border-color: #62748a; background: rgba(130, 146, 164, .16); }
+.proton-tier.tier-bronze { color: #f0c7a8; border-color: #8b5c3c; background: rgba(139, 92, 60, .18); }
+.proton-tier.tier-borked { color: #ffb5bd; border-color: #8f3f48; background: rgba(143, 63, 72, .18); }
+.proton-total { margin-left: auto; color: var(--muted); font-size: 10px; }
+.proton-recommendation { margin: 9px 0 0; color: var(--text); font-size: 13px; }
+.proton-recommendation strong { color: var(--bright); font-weight: 700; }
+.proton-basis { margin: 3px 0 0; color: var(--muted); font-size: 11px; line-height: 1.45; }
+.proton-apply { margin-top: 9px; }
+.proton-chips { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 9px; }
+.proton-chip {
+  padding: 2px 7px;
+  border: 1px solid var(--border-soft);
+  border-radius: 3px;
+  background: rgba(0, 0, 0, .2);
+  color: var(--muted-strong);
+  font-size: 10px;
+  white-space: nowrap;
+}
+.proton-card .link-button, .anticheat-banner .link-button { margin-top: 8px; }
+
+.anticheat-banner {
+  display: flex;
+  gap: 11px;
+  align-items: flex-start;
+  padding: 11px 14px;
+  border: 1px solid var(--border);
+  border-left-width: 4px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--panel-strong) 90%, transparent);
+}
+.anticheat-banner.risk-danger { border-color: #8f3f48; border-left-color: #ff6b7a; background: rgba(120, 33, 44, .24); }
+.anticheat-banner.risk-warning { border-color: #8d7430; border-left-color: #f0c25e; background: rgba(110, 84, 20, .22); }
+.anticheat-banner.risk-caution { border-color: #3d617f; border-left-color: #66a9d8; background: rgba(26, 61, 88, .2); }
+.anticheat-banner.risk-safe { border-color: #3d6b4f; border-left-color: #79c795; background: rgba(27, 63, 43, .18); }
+.anticheat-icon { flex: none; font-size: 19px; line-height: 1.2; }
+.anticheat-body { min-width: 0; }
+.anticheat-body strong { display: block; margin-bottom: 2px; color: var(--bright); font-size: 12.5px; }
+.anticheat-body p { margin: 0; color: var(--muted-strong); font-size: 11px; line-height: 1.5; }
+.anticheat-note { margin-top: 4px !important; color: var(--muted) !important; font-style: italic; }
+.drawer .compatibility-banners { margin-top: 0; margin-bottom: 16px; }
+.drawer .proton-card, .drawer .anticheat-banner { padding: 10px 12px; }
+.drawer .proton-recommendation { font-size: 12px; }
+
+@media (max-width: 720px) {
+  .compatibility-banners { margin-top: 14px; }
+  .proton-total { margin-left: 0; }
+}

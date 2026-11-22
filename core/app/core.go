@@ -22,6 +22,8 @@ import (
 	"github.com/playnux/core/auth"
 	"github.com/playnux/core/database"
 	"github.com/playnux/core/metadata"
+	"github.com/playnux/core/metadata/anticheat"
+	"github.com/playnux/core/metadata/protondb"
 	"github.com/playnux/core/metadata/steamgriddb"
 	"github.com/playnux/core/models"
 	"github.com/playnux/core/runner/applications"
@@ -71,6 +73,8 @@ type App struct {
 	artwork    *metadata.ArtworkManager
 	linux      *linux.Provider
 	emulation  *emulation.Provider
+	protonDB   *protondb.Client
+	antiCheat  *anticheat.Client
 }
 
 // DefaultDBPath devolve ~/.config/playnux/playnux.db (ou o equivalente XDG).
@@ -123,6 +127,8 @@ func NewWithProviders(dbPath string, view auth.WebView, sink launcher.Sink, prov
 		manager:    auth.NewManager(db, view, providers...),
 		providers:  byID,
 		launcher:   launcher.New(byID, gameproc.NewScanner(), sink),
+		protonDB:   protondb.NewClient(),
+		antiCheat:  anticheat.NewClient(),
 	}
 	for _, provider := range providers {
 		byID[provider.ID()] = provider

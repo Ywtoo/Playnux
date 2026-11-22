@@ -86,19 +86,21 @@ func (l *Launcher) LaunchWithOptions(game *models.Game, options Options) error {
 		return fmt.Errorf("launcher: %s já está em execução", game.Name)
 	}
 
-	command, args, err := provider.LaunchCommand(game)
-	if err != nil {
-		l.unmarkRunning(game.ID)
-		return err
-	}
+	command := options.Command
+	args := append([]string(nil), options.CommandArgs...)
 	if command == "" {
-		l.unmarkRunning(game.ID)
-		return fmt.Errorf("launcher: a loja não informou um comando para %s", game.Name)
-	}
-
-	if options.Command != "" {
-		command = options.Command
-		args = append([]string(nil), options.CommandArgs...)
+		// A custom Proton/Wine runner does not need the store client to be
+		// installed; only fall back to the provider when no override exists.
+		var err error
+		command, args, err = provider.LaunchCommand(game)
+		if err != nil {
+			l.unmarkRunning(game.ID)
+			return err
+		}
+		if command == "" {
+			l.unmarkRunning(game.ID)
+			return fmt.Errorf("launcher: a loja não informou um comando para %s", game.Name)
+		}
 	}
 	cmd := exec.Command(command, append(args, options.Arguments...)...)
 	if game.PluginID == "linux" && filepath.IsAbs(game.InstallDirectory) {

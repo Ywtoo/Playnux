@@ -528,3 +528,9 @@ func (h *Host) ApplySteamGridImage(gameID, field string, image metadata.WebImage
 func (h *Host) GetGameRuntime(gameID string) (app.GameRuntime, error) {
 	return h.core.GameRuntime(h.appContext(), gameID)
 }
+
+// GetGameCompatibility returns ProtonDB recommendations and anti-cheat status
+// for the details banner.
+func (h *Host) GetGameCompatibility(gameID string) (app.GameCompatibility, error) {
+	return h.core.GameCompatibility(h.appContext(), gameID)
+}

@@ -46,3 +46,11 @@ O suporte a execução de jogos Windows no Linux utiliza as ferramentas:
 * **Proton (Valve / Wine):** Compatibilidade e tradução DirectX via DXVK / VKD3D.
 * **Wine:** Software de camada de compatibilidade Windows para ecossistemas Unix.
 * **Heroic / Legendary / GOGdl:** Ferramentas comunitárias de suporte a Epic e GOG no Linux.
+
+---
+
+## 🛡️ Bases Comunitárias de Compatibilidade & Anti-Cheat
+
+* **ProtonDB / Comunidade Proton:** Relatórios e avaliações comunitárias de compatibilidade via Proton ([protondb.com](https://www.protondb.com)).
+* **AreWeAntiCheatYet:** Catálogo aberto de suporte a softwares anti-cheat no Linux/Wine/Proton ([areweanticheatyet.com](https://areweanticheatyet.com)), mantido pela comunidade sob licença CC-BY-SA / MIT.
+

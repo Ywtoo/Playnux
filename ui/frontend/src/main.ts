@@ -6,6 +6,7 @@ import "./components/game-card";
 import type { PlaynuxGameCardElement } from "./components/game-card";
 import { applyUISettings, DEFAULT_UI_SETTINGS, type UISettingsLike } from "./appearance";
 import { createBigPicture } from "./big-picture";
+import { renderCompatibility } from "./compatibility";
 import { setupIntegrations } from "./integrations";
 import { installDeepSleep } from "./deep-sleep";
 import {
@@ -59,6 +60,7 @@ const detailsTrailer = element<HTMLButtonElement>("details-trailer");
 const detailsTrailerPlayer = element<HTMLElement>("details-trailer-player");
 const detailsDescription = element<HTMLElement>("details-description");
 const detailsFacts = element<HTMLElement>("details-facts");
+const detailsCompatibility = element<HTMLElement>("details-compatibility");
 
 const gameGrid = element<HTMLElement>("game-grid");
 const empty = element<HTMLElement>("empty");
@@ -84,6 +86,7 @@ const drawerFacts = element<HTMLElement>("drawer-facts");
 const drawerTrailer = element<HTMLElement>("drawer-trailer");
 const drawerTrailerPlay = element<HTMLButtonElement>("drawer-trailer-play");
 const drawerTrailerPlayer = element<HTMLElement>("drawer-trailer-player");
+const drawerCompatibility = element<HTMLElement>("drawer-compatibility");
 
 const addLocalFolder = element<HTMLButtonElement>("add-local-folder");
 const addRomFolder = element<HTMLButtonElement>("add-rom-folder");
@@ -533,6 +536,7 @@ function renderDetails(): void {
     detailsBody.hidden = true;
     detailsBg.removeAttribute("src");
     resetDetailsTrailer();
+    renderCompatibility(detailsCompatibility, null, showToast);
     return;
   }
 
@@ -573,6 +577,8 @@ function renderDetails(): void {
 
   resetDetailsTrailer();
   detailsTrailer.hidden = !game.trailer_url;
+
+  renderCompatibility(detailsCompatibility, game, showToast);
 
   // Restart the subtle hero fade when switching games without rebuilding the
   // whole panel (keeps scrolling and focus stable).
@@ -652,6 +658,7 @@ function renderDrawer(game: Game): void {
 
   resetTrailer(game.trailer_url);
   setDrawerPlayButton(game);
+  renderCompatibility(drawerCompatibility, game, showToast);
 }
 
 function resetTrailer(url: string | null | undefined): void {
