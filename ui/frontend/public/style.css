@@ -449,16 +449,16 @@ playnux-store-chip { display: block; }
   min-width: 0;
   min-height: 0;
   overflow-y: auto;
-  background: #131313;
+  background: #111216;
 }
 .hero-media { position: absolute; inset: 0 0 auto; height: var(--hero-height); overflow: hidden; }
-.hero-media img { width: 100%; height: 100%; object-fit: cover; opacity: .72; }
+.hero-media img { width: 100%; height: 100%; object-fit: cover; opacity: .88; }
 .hero-shade {
   position: absolute;
   inset: 0;
   background:
-    linear-gradient(180deg, rgba(19, 19, 19, .08) 0%, rgba(19, 19, 19, .28) 42%, #131313 96%),
-    linear-gradient(90deg, rgba(19, 19, 19, .72), transparent 55%);
+    linear-gradient(180deg, rgba(17, 18, 22, 0) 0%, rgba(17, 18, 22, .2) 35%, rgba(17, 18, 22, .85) 75%, #111216 100%),
+    linear-gradient(90deg, rgba(17, 18, 22, .65) 0%, rgba(17, 18, 22, .2) 40%, transparent 70%);
 }
 .hero-body {
   position: relative;

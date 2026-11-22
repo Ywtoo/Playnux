@@ -301,7 +301,7 @@ func (s *SteamProvider) fetchCommunityLibrary(ctx context.Context) ([]*models.Ga
 			Name:            name,
 			SortingName:     name,
 			CoverImage:      fmt.Sprintf("https://steamcdn-a.akamaihd.net/steam/apps/%s/library_600x900_2x.jpg", appID),
-			BackgroundImage: fmt.Sprintf("https://steamcdn-a.akamaihd.net/steam/apps/%s/page_bg_generated_v6b.jpg", appID),
+			BackgroundImage: fmt.Sprintf("https://steamcdn-a.akamaihd.net/steam/apps/%s/library_hero.jpg", appID),
 			Playtime:        hoursToSeconds(raw.HoursOnRecord),
 			Platforms:       []string{"PC (Linux)", "PC (Windows)"},
 		})
@@ -359,7 +359,7 @@ func (s *SteamProvider) fetchDigitalLibrary(ctx context.Context) ([]*models.Game
 
 		// URLs padronizadas de imagens oficiais da Valve
 		cover := fmt.Sprintf("https://steamcdn-a.akamaihd.net/steam/apps/%s/library_600x900_2x.jpg", appIDStr)
-		bg := fmt.Sprintf("https://steamcdn-a.akamaihd.net/steam/apps/%s/page_bg_generated_v6b.jpg", appIDStr)
+		bg := fmt.Sprintf("https://steamcdn-a.akamaihd.net/steam/apps/%s/library_hero.jpg", appIDStr)
 		icon := ""
 		if raw.ImgIconURL != "" {
 			icon = fmt.Sprintf("https://media.steampowered.com/steamcommunity/public/images/apps/%s/%s.jpg", appIDStr, raw.ImgIconURL)
@@ -490,7 +490,7 @@ func scanLocalInstalledGames() map[string]*models.Game {
 					Name:             name,
 					SortingName:      name,
 					CoverImage:       fmt.Sprintf("https://steamcdn-a.akamaihd.net/steam/apps/%s/library_600x900_2x.jpg", appID),
-					BackgroundImage:  fmt.Sprintf("https://steamcdn-a.akamaihd.net/steam/apps/%s/page_bg_generated_v6b.jpg", appID),
+					BackgroundImage:  fmt.Sprintf("https://steamcdn-a.akamaihd.net/steam/apps/%s/library_hero.jpg", appID),
 					IsInstalled:      true,
 					InstallDirectory: fullInstallPath,
 					InstallSize:      size,
