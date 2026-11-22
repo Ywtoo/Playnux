@@ -160,6 +160,7 @@ export class PlaynuxGameCardElement extends HTMLElement {
       return;
     }
     this.frame.hidden = false;
+    this.frame.classList.toggle("is-uninstalled", !game.is_installed);
     this.frame.style.setProperty("--custom-contextmenu-data", game.id);
     this.heading.textContent = game.name;
     const icon = game.icon || "";

@@ -42,7 +42,7 @@ async function applyRecommended(game: Game, runnerPath: string, notify: (message
   }
 }
 
-function paint(container: HTMLElement, game: Game, payload: CompatibilityPayload, notify: (message: string, error?: boolean) => void, runners: { name: string; path: string; kind: string }[]): void {
+function paint(container: HTMLElement, game: Game, payload: CompatibilityPayload, notify: (message: string, error?: boolean) => void, runners: { name: string; path: string; kind: string }[], configuredRunner = ""): void {
   if (container.dataset.gameId !== game.id) return;
   const nodes: HTMLElement[] = [];
   const antiCheat = renderAntiCheatBanner(payload.anticheat);
@@ -51,6 +51,7 @@ function paint(container: HTMLElement, game: Game, payload: CompatibilityPayload
   const proton = renderProtonCard(payload.protondb, {
     runners,
     canApply: game.is_installed,
+    configuredRunner,
     onApply: (runnerPath) => {
       const runner = runners.find((item) => item.path === runnerPath);
       void applyRecommended(game, runnerPath, notify, runner?.name ?? "Proton");
@@ -75,15 +76,28 @@ export function renderCompatibility(container: HTMLElement, game: Game | null, n
   }
 
   const cached = cache.get(game.id);
-  const render = (payload: CompatibilityPayload, runners: { name: string; path: string; kind: string }[]) => {
-    paint(container, game, payload, notify, runners);
+  const render = (payload: CompatibilityPayload, runners: { name: string; path: string; kind: string }[], configured = "") => {
+    paint(container, game, payload, notify, runners, configured);
+  };
+
+  const getRunnerState = async () => {
+    try {
+      const [runners, runtime] = await Promise.all([
+        Host.GetCompatibilityRunners().catch(() => []),
+        Host.GetGameRuntime(game.id).catch(() => null),
+      ]);
+      return {
+        runners: (runners ?? []) as { name: string; path: string; kind: string }[],
+        configured: runtime?.configured || runtime?.running || "",
+      };
+    } catch {
+      return { runners: [], configured: "" };
+    }
   };
 
   if (cached) {
     if (cached.protondb?.recommended) {
-      void Host.GetCompatibilityRunners()
-        .catch(() => [])
-        .then((runners) => render(cached, (runners ?? []) as { name: string; path: string; kind: string }[]));
+      void getRunnerState().then(({ runners, configured }) => render(cached, runners, configured));
     } else {
       render(cached, []);
     }
@@ -91,9 +105,9 @@ export function renderCompatibility(container: HTMLElement, game: Game | null, n
   }
 
   void fetchCompatibility(game).then(async (payload) => {
-    const runners = payload.protondb?.recommended
-      ? ((await Host.GetCompatibilityRunners().catch(() => [])) as { name: string; path: string; kind: string }[])
-      : [];
-    render(payload, runners ?? []);
+    const { runners, configured } = payload.protondb?.recommended
+      ? await getRunnerState()
+      : { runners: [], configured: "" };
+    render(payload, runners, configured);
   }).catch(() => undefined);
 }

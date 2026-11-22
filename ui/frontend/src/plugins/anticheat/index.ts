@@ -13,11 +13,11 @@ export interface AntiCheatInfo {
 }
 
 const STATUS_LABELS: Record<string, string> = {
-  supported: "Supported",
-  running: "Running",
-  broken: "Broken",
-  denied: "Denied",
-  planned: "Planned",
+  supported: "Suportado",
+  running: "Em execução",
+  broken: "Incompatível",
+  denied: "Banimento / Bloqueado",
+  planned: "Planejado",
 };
 
 /** Builds an anti-cheat status/warning banner. Returns null when not relevant. */
@@ -30,24 +30,27 @@ export function renderAntiCheatBanner(info: AntiCheatInfo | null | undefined): H
   banner.className = `anticheat-banner risk-${risk}`;
   banner.setAttribute("role", info.warning ? "alert" : "status");
 
-  const icon = document.createElement("span");
-  icon.className = "anticheat-icon";
-  icon.setAttribute("aria-hidden", "true");
-  icon.textContent = info.warning ? "⚠" : "🛡";
+  const badge = document.createElement("span");
+  badge.className = `anticheat-badge badge-${risk}`;
+  const status = STATUS_LABELS[(info.status || "").toLowerCase()] ?? info.status ?? "";
+  badge.textContent = status;
 
   const body = document.createElement("div");
   body.className = "anticheat-body";
-  const title = document.createElement("strong");
+  const title = document.createElement("div");
+  title.className = "anticheat-head";
+  const titleText = document.createElement("strong");
   const cheats = info.anticheats.join(" + ");
-  const status = STATUS_LABELS[(info.status || "").toLowerCase()] ?? info.status ?? "";
-  title.textContent = info.warning ? "Aviso de anti-cheat" : "Anti-cheat";
+  titleText.textContent = `Anti-Cheat: ${cheats}`;
+  title.append(titleText, badge);
+
   const text = document.createElement("p");
   if (info.warning) {
-    text.textContent = `Este jogo usa ${cheats}. Rodar via Proton/Wine no Linux pode não conectar aos servidores ou causar suspensão da conta. Status atual: ${status}. Verifique antes de jogar online.`;
+    text.textContent = `Rodar via Proton/Wine no Linux pode não conectar aos servidores ou causar banimento da conta.`;
   } else if ((info.status || "").toLowerCase() === "running") {
-    text.textContent = `${cheats} · ${status}. Funciona no Linux, mas pode exigir ajustes ou quebrar após atualizações.`;
+    text.textContent = `Funciona no Linux com Proton, mas pode exigir configurações extras ou quebrar com novos patches.`;
   } else {
-    text.textContent = `${cheats} · ${status} no Linux/Wine.`;
+    text.textContent = `Totalmente funcional no Linux via Proton/Wine.`;
   }
   body.append(title, text);
 
@@ -62,13 +65,13 @@ export function renderAntiCheatBanner(info: AntiCheatInfo | null | undefined): H
     const link = document.createElement("button");
     link.type = "button";
     link.className = "link-button";
-    link.textContent = "Ver status no AreWeAntiCheatYet…";
+    link.textContent = "Ver no AreWeAntiCheatYet…";
     link.addEventListener("click", () => {
       void Browser.OpenURL(info.url ?? "").catch(() => undefined);
     });
     body.append(link);
   }
 
-  banner.append(icon, body);
+  banner.append(body);
   return banner;
 }

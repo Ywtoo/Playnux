@@ -33,12 +33,12 @@ export async function openProtonReports(game: Game): Promise<void> {
 }
 
 const TIER_LABELS: Record<string, string> = {
-  platinum: "💎 Platinum",
-  gold: "🥇 Gold",
-  silver: "🥈 Silver",
-  bronze: "🥉 Bronze",
-  borked: "❌ Borked",
-  pending: "⏳ Pendente",
+  platinum: "Platinum",
+  gold: "Gold",
+  silver: "Silver",
+  bronze: "Bronze",
+  borked: "Borked",
+  pending: "Pendente",
 };
 
 function normalized(value: string): string {
@@ -55,6 +55,7 @@ interface BannerOptions {
   onApply?: (runnerPath: string) => void;
   runners?: { name: string; path: string; kind: string }[];
   canApply?: boolean;
+  configuredRunner?: string;
 }
 
 /** Builds the ProtonDB hero card. Returns null when there is nothing useful. */
@@ -99,7 +100,10 @@ export function renderProtonCard(intel: ProtonIntelligence | null | undefined, o
     }
 
     const runner = (options.runners ?? []).find((item) => item.kind === "proton" && runnerMatches(intel.recommended ?? "", item.name));
-    if (runner && options.onApply && options.canApply !== false) {
+    // Só exibe o botão de aplicar se o jogo estiver instalado, o runner estiver disponível E
+    // o runner configurado atualmente for DIFERENTE do recomendado.
+    const isAlreadyApplied = Boolean(options.configuredRunner && runner && runnerMatches(options.configuredRunner, runner.name));
+    if (runner && options.onApply && options.canApply !== false && !isAlreadyApplied) {
       const apply = document.createElement("button");
       apply.type = "button";
       apply.className = "primary-button compact proton-apply";
@@ -120,11 +124,12 @@ export function renderProtonCard(intel: ProtonIntelligence | null | undefined, o
     chips.className = "proton-chips";
     for (const report of recent) {
       const chip = document.createElement("span");
-      chip.className = `proton-chip tier-${report.rating.toLowerCase()}`;
+      const tierKey = (report.rating || "").toLowerCase();
+      chip.className = `proton-chip tier-${tierKey}`;
       chip.title = report.timestamp
         ? new Date(report.timestamp * 1000).toLocaleDateString("pt-BR")
         : "";
-      chip.textContent = `${TIER_LABELS[report.rating.toLowerCase()]?.split(" ")[0] ?? "•"} ${report.proton_version}`;
+      chip.textContent = `${TIER_LABELS[tierKey] ?? "•"} · ${report.proton_version}`;
       chips.append(chip);
     }
     card.append(chips);

@@ -324,6 +324,7 @@ function renderDetailsList(): void {
     button.dataset.gameId = game.id;
     button.style.setProperty("--custom-contextmenu-data", game.id);
     button.classList.toggle("is-selected", detailsGame?.id === game.id);
+    button.classList.toggle("is-uninstalled", !game.is_installed);
     button.setAttribute("aria-label", `Ver ${game.name}`);
 
     const thumb = document.createElement("span");

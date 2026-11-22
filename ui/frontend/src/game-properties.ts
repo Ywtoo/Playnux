@@ -555,28 +555,22 @@ export function setupGameProperties(options: Options) {
     void resolveExecutable.then((exe) => {
       if (game !== target || !dialog.open) return;
       if (exe) windowsExecutable = exe;
-      const local = native || Boolean(windowsExecutable);
-      localSettings.disabled = !local;
+      const local = true;
+      localSettings.disabled = false;
       runnerSelect.disabled = !windowsExecutable;
-      save.hidden = !local;
+      save.hidden = false;
       launchProvider.textContent = windowsExecutable
-        ? "Este jogo Windows pode iniciar pelo cliente da loja ou por um Proton/Wine isolado do Playnux, sem alterar configurações da Steam ou do Heroic."
+        ? "Configure o executável, argumentos e escolha o motor de compatibilidade (Proton ou Wine isolado do Playnux)."
         : native
-          ? "O Playnux inicia este jogo diretamente. Ajuste abaixo os argumentos e o motor de compatibilidade."
-          : game.plugin_id === "steam"
-            ? "Abra o jogo pela Steam ou instale-o no disco para habilitar um Proton isolado no Playnux."
-            : game.plugin_id === "gog" || game.plugin_id === "epic"
-              ? "Instale o jogo pelo Heroic para habilitar um Proton isolado ou ajuste Wine/Proton no cliente."
-              : `A inicialização deste jogo é gerenciada pela origem ${sourceLabel(game)}.`;
+          ? "O Playnux inicia este jogo diretamente. Ajuste abaixo os argumentos e opções de inicialização."
+          : `Gerenciado por ${sourceLabel(game)}. Você pode passar argumentos adicionais ou configurar um executável/runner personalizado.`;
       if (!local) {
         updateCommandPreview();
         return;
       }
       // Load runners before restoring the saved choice: otherwise the <select>
       // stays on "auto" and looks like the Proton option was not saved.
-      const loadRunners = windowsExecutable
-        ? Host.GetCompatibilityRunners().then((list) => { runners = list ?? []; fillRunners(); })
-        : Promise.resolve();
+      const loadRunners = Host.GetCompatibilityRunners().then((list) => { runners = list ?? []; fillRunners(); });
       void loadRunners.then(() => Host.GetLaunchOptions(target.id)).then((settings) => {
         if (game !== target || !dialog.open) return;
         directory.value = settings.directory || "";
