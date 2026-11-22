@@ -9,7 +9,8 @@
 </head>
 <body>
   <div class="shell">
-    <header class="application-bar" aria-label="Comandos do Playnux">
+    <header class="topbar">
+      <!-- 1. Menu Dropdown Vertical de Sistema com Logo -->
       <div class="system-menu-dropdown">
         <button id="system-menu-trigger" class="system-menu-button" type="button" aria-haspopup="true" aria-expanded="false">
           <span class="system-logo-mark" aria-hidden="true">P</span>
@@ -28,76 +29,44 @@
           <button id="menu-big-picture" class="menu-item" type="button">⛶ Modo Big Picture</button>
         </div>
       </div>
-      <button id="add-game" class="ghost-button compact" type="button">＋ Adicionar</button>
-      <button id="refresh" class="ghost-button compact" type="button">⚙ Configurações</button>
+
+      <!-- 2. Barra de Pesquisa -->
+      <label class="search" for="search">
+        <span aria-hidden="true">⌕</span>
+        <input id="search" type="search" placeholder="Buscar na biblioteca…" autocomplete="off" spellcheck="false"/>
+        <kbd>/</kbd>
+      </label>
+
+      <!-- 3. Filtros Rápidos (Todos, Instalados, Favoritos, Recentes, Origem) -->
+      <nav class="top-filters" aria-label="Filtros da biblioteca">
+        <button class="top-filter-btn is-active" data-filter="all" type="button">Todos <span class="filter-count" data-count="all"></span></button>
+        <button class="top-filter-btn" data-filter="installed" type="button">Instalados <span class="filter-count" data-count="installed"></span></button>
+        <button class="top-filter-btn" data-filter="favorites" type="button">★ Favoritos <span class="filter-count" data-count="favorites"></span></button>
+        <select id="source-filter" class="top-source-select" aria-label="Origem dos jogos">
+          <option value="">Todas as origens</option>
+        </select>
+      </nav>
+
+      <!-- 4. Alternador de Visualização (Lista / Grade) e Big Picture -->
+      <div class="toolbar">
+        <div class="view-switch" role="group" aria-label="Modo de visualização">
+          <button class="view-mode is-active" data-view-mode="details" type="button" title="Visão em Lista / Detalhes">Lista</button>
+          <button class="view-mode" data-view-mode="grid" type="button" title="Visão em Grade de Capas">Grade</button>
+        </div>
+        <button id="big-picture-open" class="ghost-button compact" type="button" title="Modo Big Picture">
+          ⛶
+        </button>
+      </div>
+
+      <!-- Notificação de downloads em segundo plano -->
       <div id="background-downloads" class="background-downloads" hidden>
         <span role="status"></span>
         <progress aria-label="Progresso dos downloads"></progress>
         <button class="ghost-button compact" type="button" aria-label="Dispensar status dos downloads">×</button>
       </div>
     </header>
-    <aside class="sidebar">
-      <div class="brand">
-        <span class="brand-mark" aria-hidden="true">P</span>
-        <div>
-          <strong>PLAYNUX</strong>
-          <span>Sua biblioteca, no Linux</span>
-        </div>
-      </div>
-
-      <nav class="filters" aria-label="Filtros da biblioteca">
-        <button class="filter is-active" data-filter="all" type="button">
-          <span class="filter-icon">▦</span> Todos os jogos <span class="filter-count" data-count="all"></span>
-        </button>
-        <button class="filter" data-filter="installed" type="button">
-          <span class="filter-icon">◉</span> Instalados <span class="filter-count" data-count="installed"></span>
-        </button>
-        <button class="filter" data-filter="favorites" type="button">
-          <span class="filter-icon">★</span> Favoritos <span class="filter-count" data-count="favorites"></span>
-        </button>
-        <button class="filter" data-filter="recent" type="button">
-          <span class="filter-icon">◷</span> Recentes <span class="filter-count" data-count="recent"></span>
-        </button>
-      </nav>
-
-      <div class="library-origin">
-        <label class="section-label" for="source-filter">Origem dos jogos</label>
-        <select id="source-filter"><option value="">Todas as origens</option></select>
-      </div>
-
-      <section class="local-sources" aria-labelledby="local-sources-title">
-        <div class="section-label" id="local-sources-title">Biblioteca local</div>
-        <button id="add-local-folder" class="source-button" type="button">
-          <span aria-hidden="true">＋</span> Escanear pasta
-        </button>
-        <button id="add-rom-folder" class="source-button" type="button">
-          <span aria-hidden="true">＋</span> Pasta de ROMs
-        </button>
-      </section>
-
-      <div class="sidebar-foot">
-        <span class="sleep-dot" aria-hidden="true"></span>
-        <p><strong>Deep Sleep</strong><br/>A UI é congelada enquanto você joga.</p>
-      </div>
-    </aside>
 
     <main class="workspace">
-      <header class="topbar">
-        <label class="search" for="search">
-          <span aria-hidden="true">⌕</span>
-          <input id="search" type="search" placeholder="Buscar na biblioteca…" autocomplete="off" spellcheck="false"/>
-          <kbd>/</kbd>
-        </label>
-        <div class="toolbar">
-          <div class="view-switch" role="group" aria-label="Modo de visualização">
-            <button class="view-mode is-active" data-view-mode="details" type="button">Detalhes</button>
-            <button class="view-mode" data-view-mode="grid" type="button">Grade</button>
-          </div>
-          <button id="big-picture-open" class="ghost-button" type="button" title="Abrir Big Picture">
-            ⛶ <span>Big Picture</span>
-          </button>
-        </div>
-      </header>
 
       <section id="details-view" class="details-view" aria-label="Visualização de detalhes">
         <aside class="details-list-panel">
@@ -234,8 +203,15 @@
             <legend>Tema</legend>
             <label class="field" for="appearance-theme">Tema base
               <select id="appearance-theme">
-                <option value="theme-playnite-dark">Playnite Dark</option>
-                <option value="theme-steam">Steam</option>
+                <option value="theme-playnite-dark">Playnite Dark (P&B)</option>
+                <option value="theme-steam">Steam Dark (P&B)</option>
+              </select>
+            </label>
+            <label class="field" for="appearance-font-size">Tamanho da fonte
+              <select id="appearance-font-size">
+                <option value="small">Compacto / Pequeno</option>
+                <option value="medium" selected>Padrão / Médio</option>
+                <option value="large">Grande / Acessível</option>
               </select>
             </label>
             <label class="field" for="appearance-view">Visualização padrão

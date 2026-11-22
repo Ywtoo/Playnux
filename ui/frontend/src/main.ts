@@ -114,7 +114,7 @@ const appsList = element<HTMLElement>("apps-list");
 const appsAdd = element<HTMLButtonElement>("apps-add");
 
 const bigPictureRoot = element<HTMLElement>("big-picture");
-const filterButtons = Array.from(document.querySelectorAll<HTMLButtonElement>(".filter"));
+const filterButtons = Array.from(document.querySelectorAll<HTMLButtonElement>(".top-filter-btn"));
 const toast = element<HTMLElement>("toast");
 
 let allGames: Game[] = [];

@@ -21,7 +21,7 @@ func TestUISettingsRoundTrip(t *testing.T) {
 		t.Fatalf("unexpected defaults: %+v", defaults)
 	}
 
-	want := UISettings{Theme: ThemeSteam, ViewMode: "grid", GPUAcceleration: false, Transitions: false}
+	want := UISettings{Theme: ThemeSteam, ViewMode: "grid", FontSize: "large", GPUAcceleration: false, Transitions: false}
 	if err := core.SaveUISettings(ctx, want); err != nil {
 		t.Fatal(err)
 	}
@@ -35,8 +35,8 @@ func TestUISettingsRoundTrip(t *testing.T) {
 }
 
 func TestUISettingsClampsUnknownValues(t *testing.T) {
-	got := NormalizeUISettings(UISettings{Theme: "neon", ViewMode: "list"})
-	if got.Theme != ThemePlayniteDark || got.ViewMode != "details" {
+	got := NormalizeUISettings(UISettings{Theme: "neon", ViewMode: "list", FontSize: "huge"})
+	if got.Theme != ThemePlayniteDark || got.ViewMode != "details" || got.FontSize != "medium" {
 		t.Fatalf("normalized = %+v", got)
 	}
 	if err := ValidateTheme("neon"); err == nil {

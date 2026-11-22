@@ -15,6 +15,7 @@ const (
 	settingUIView        = "ui.view_mode"
 	settingUIGPU             = "ui.gpu_acceleration"
 	settingUITransitions     = "ui.transitions"
+	settingUIFontSize          = "ui.font_size"
 	settingUIBackgroundTrailer = "ui.background_trailer"
 	settingUIBigPictureTrailer = "ui.big_picture_trailer"
 
@@ -27,6 +28,7 @@ const (
 type UISettings struct {
 	Theme             string `json:"theme"`
 	ViewMode          string `json:"view_mode"`
+	FontSize          string `json:"font_size"` // "small", "medium", "large"
 	GPUAcceleration   bool   `json:"gpu_acceleration"`
 	Transitions       bool   `json:"transitions"`
 	BackgroundTrailer bool   `json:"background_trailer"`
@@ -38,6 +40,7 @@ func DefaultUISettings() UISettings {
 	return UISettings{
 		Theme:             ThemePlayniteDark,
 		ViewMode:          "details",
+		FontSize:          "medium",
 		GPUAcceleration:   true,
 		Transitions:       true,
 		BackgroundTrailer: true,
@@ -55,6 +58,11 @@ func (c *App) UISettings(ctx context.Context) (UISettings, error) {
 	}
 	if raw, err := c.db.GetSetting(ctx, settingUIView); err == nil {
 		settings.ViewMode = raw
+	} else if !errors.Is(err, database.ErrSettingNotFound) {
+		return settings, err
+	}
+	if raw, err := c.db.GetSetting(ctx, settingUIFontSize); err == nil {
+		settings.FontSize = raw
 	} else if !errors.Is(err, database.ErrSettingNotFound) {
 		return settings, err
 	}
@@ -103,6 +111,7 @@ func (c *App) SaveUISettings(ctx context.Context, settings UISettings) error {
 	values := map[string]string{
 		settingUITheme:             settings.Theme,
 		settingUIView:              settings.ViewMode,
+		settingUIFontSize:          settings.FontSize,
 		settingUIGPU:               string(gpu),
 		settingUITransitions:       string(transitions),
 		settingUIBackgroundTrailer: string(bgTrailer),
@@ -126,9 +135,14 @@ func NormalizeUISettings(settings UISettings) UISettings {
 	if view != "grid" && view != "details" {
 		view = "details"
 	}
+	fontSize := strings.TrimSpace(settings.FontSize)
+	if fontSize != "small" && fontSize != "medium" && fontSize != "large" {
+		fontSize = "medium"
+	}
 	return UISettings{
 		Theme:             theme,
 		ViewMode:          view,
+		FontSize:          fontSize,
 		GPUAcceleration:   settings.GPUAcceleration,
 		Transitions:       settings.Transitions,
 		BackgroundTrailer: settings.BackgroundTrailer,

@@ -364,6 +364,7 @@ export function setupIntegrations(options: Options) {
     try {
       const settings = await Host.GetUISettings();
       element<HTMLSelectElement>("appearance-theme").value = settings.theme;
+      element<HTMLSelectElement>("appearance-font-size").value = settings.font_size || "medium";
       element<HTMLSelectElement>("appearance-view").value = settings.view_mode;
       element<HTMLInputElement>("appearance-transitions").checked = settings.transitions;
       element<HTMLInputElement>("appearance-gpu").checked = settings.gpu_acceleration;
@@ -658,6 +659,7 @@ export function setupIntegrations(options: Options) {
     const statusLine = element("appearance-status");
     const settings: UISettingsLike = {
       theme: element<HTMLSelectElement>("appearance-theme").value,
+      font_size: element<HTMLSelectElement>("appearance-font-size").value,
       view_mode: element<HTMLSelectElement>("appearance-view").value,
       transitions: element<HTMLInputElement>("appearance-transitions").checked,
       gpu_acceleration: element<HTMLInputElement>("appearance-gpu").checked,
