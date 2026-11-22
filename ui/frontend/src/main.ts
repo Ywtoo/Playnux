@@ -40,8 +40,6 @@ function element<T extends HTMLElement>(id: string): T {
 }
 
 const searchInput = element<HTMLInputElement>("search");
-const refreshButton = element<HTMLButtonElement>("refresh");
-const addGameButton = element<HTMLButtonElement>("add-game");
 const bigPictureButton = element<HTMLButtonElement>("big-picture-open");
 const viewModeButtons = Array.from(document.querySelectorAll<HTMLButtonElement>(".view-mode"));
 
@@ -87,7 +85,6 @@ const drawerTrailerPlay = element<HTMLButtonElement>("drawer-trailer-play");
 const drawerTrailerPlayer = element<HTMLElement>("drawer-trailer-player");
 const drawerCompatibility = element<HTMLElement>("drawer-compatibility");
 
-const addRomFolder = element<HTMLButtonElement>("add-rom-folder");
 const folderDialog = element<HTMLDialogElement>("folder-dialog");
 const folderForm = element<HTMLFormElement>("folder-form");
 const folderTitle = element<HTMLElement>("folder-title");
@@ -263,7 +260,6 @@ function updateEmpty(games: Game[]): void {
 
 function setLoading(value: boolean): void {
   gameGrid.setAttribute("aria-busy", String(value));
-  refreshButton.disabled = value;
   skeleton.style.display = value && viewMode === "grid" && visibleGames.length === 0 ? "grid" : "none";
   if (value) {
     empty.hidden = true;
@@ -1098,10 +1094,6 @@ function setupEventListeners(): void {
   });
   drawerTrailerPlay.addEventListener("click", playTrailer);
 
-  refreshButton.addEventListener("click", () => {
-    integrations.open("library");
-  });
-  addGameButton.addEventListener("click", openManualDialog);
   bigPictureButton.addEventListener("click", openBigPicture);
 
   for (const button of viewModeButtons) {
@@ -1170,9 +1162,6 @@ function setupEventListeners(): void {
   element("menu-big-picture").addEventListener("click", () => {
     toggleSystemMenu(false);
     openBigPicture();
-  });
-  addRomFolder.addEventListener("click", () => {
-    void openFolderDialog("rom");
   });
   folderCancel.addEventListener("click", () => folderDialog.close());
   folderForm.addEventListener("submit", (event) => {
@@ -1349,9 +1338,6 @@ const integrations = setupIntegrations({
   },
   setViewMode: (mode) => setViewMode(mode, false),
 });
-
-element("open-integrations").addEventListener("click", () => integrations.open("plugins"));
-element("open-metadata").addEventListener("click", () => integrations.openMetadata());
 
 function applyUpdatedGame(updated: Game): void {
   allGames = allGames.map((item) => item.id === updated.id ? updated : item);
