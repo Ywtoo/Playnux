@@ -252,12 +252,18 @@ func (d Detector) Detect() map[string]Emulator {
 }
 
 // Catalog combines detected built-in emulators with user-defined ones.
+// Built-in emulators are ONLY included if they are actually detected on the host
+// system, ensuring no phantom emulators or uninstalled software are displayed.
 func Catalog(available map[string]Emulator, custom []EmulatorDefinition) []EmulatorDefinition {
-	definitions := make([]EmulatorDefinition, 0, len(emulatorDefs)+len(custom))
+	definitions := make([]EmulatorDefinition, 0, len(available)+len(custom))
 	for _, system := range systems {
 		for rank, emulatorID := range system.Emulators {
+			// If the emulator is not installed/detected, do not create or show it!
+			if _, ok := available[emulatorID]; !ok {
+				continue
+			}
 			def := definitionFor(emulatorID, available)
-			if def == nil || hasProfileFor(def.Profiles, system.Key) {
+			if def == nil || !def.Detected() || hasProfileFor(def.Profiles, system.Key) {
 				continue
 			}
 			profile := profileFor(def, system, rank)
@@ -275,9 +281,13 @@ func Catalog(available map[string]Emulator, custom []EmulatorDefinition) []Emula
 			definitions = append(definitions, *def)
 		}
 	}
-	// Emulators without a mapped system are still listed so users can create
-	// custom profiles for unusual folder layouts.
+	// Emulators detected on the system without an auto-mapped system are listed
+	// so the user can bind folders or custom profiles to them.
 	for _, def := range emulatorDefs {
+		emulator, isAvailable := available[def.ID]
+		if !isAvailable || (emulator.Binary == "" && emulator.FlatpakID == "") {
+			continue
+		}
 		found := false
 		for _, existing := range definitions {
 			if existing.ID == def.ID {
@@ -288,7 +298,6 @@ func Catalog(available map[string]Emulator, custom []EmulatorDefinition) []Emula
 		if found {
 			continue
 		}
-		emulator := available[def.ID]
 		definitions = append(definitions, EmulatorDefinition{
 			ID:         emulator.ID,
 			Name:       emulator.Name,

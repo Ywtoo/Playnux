@@ -255,15 +255,17 @@ export function setupIntegrations(options: Options) {
     const previous = select.value;
     const options: HTMLOptionElement[] = [];
     for (const definition of emulationCatalog) {
+      // Only list profiles for emulators that are actually installed and detected
+      if (!definition.executable && !definition.flatpak_id) continue;
       for (const profile of definition.profiles ?? []) {
         const available = Boolean(profile.executable || profile.flatpak_id);
-        const option = new Option(`${profileLabel(definition, profile)}${available ? "" : " (não encontrado)"}`, profile.profile_id);
-        option.disabled = !available;
+        if (!available) continue;
+        const option = new Option(profileLabel(definition, profile), profile.profile_id);
         options.push(option);
       }
     }
     if (!options.length) {
-      options.push(new Option("Nenhum perfil disponível", ""));
+      options.push(new Option("Nenhum emulador instalado detectado (adicione um abaixo)", ""));
       options[0].disabled = true;
     }
     select.replaceChildren(...options);
