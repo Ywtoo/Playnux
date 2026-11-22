@@ -10,11 +10,26 @@
 <body>
   <div class="shell">
     <header class="application-bar" aria-label="Comandos do Playnux">
-      <strong>Playnux</strong>
-      <button id="add-game" class="primary-button compact" type="button">＋ Adicionar jogo</button>
-      <button id="refresh" class="ghost-button" type="button">⚙ Configurações</button>
-      <button id="open-metadata" class="ghost-button" type="button">Metadados</button>
-      <button id="open-integrations" class="ghost-button" type="button">Plugins</button>
+      <div class="system-menu-dropdown">
+        <button id="system-menu-trigger" class="system-menu-button" type="button" aria-haspopup="true" aria-expanded="false">
+          <span class="system-logo-mark" aria-hidden="true">P</span>
+          <strong>Playnux</strong>
+          <span class="system-caret" aria-hidden="true">▾</span>
+        </button>
+        <div id="system-menu-popover" class="system-menu-popover" hidden>
+          <button id="menu-add-game" class="menu-item" type="button">＋ Adicionar jogo…</button>
+          <button id="menu-scan-local" class="menu-item" type="button">📁 Escanear pasta local…</button>
+          <button id="menu-scan-roms" class="menu-item" type="button">🎮 Escanear pasta de ROMs…</button>
+          <div class="menu-separator"></div>
+          <button id="menu-metadata" class="menu-item" type="button">📥 Baixar metadados…</button>
+          <button id="menu-plugins" class="menu-item" type="button">🔌 Plugins e Lojas…</button>
+          <button id="menu-settings" class="menu-item" type="button">⚙ Configurações…</button>
+          <div class="menu-separator"></div>
+          <button id="menu-big-picture" class="menu-item" type="button">⛶ Modo Big Picture</button>
+        </div>
+      </div>
+      <button id="add-game" class="ghost-button compact" type="button">＋ Adicionar</button>
+      <button id="refresh" class="ghost-button compact" type="button">⚙ Configurações</button>
       <div id="background-downloads" class="background-downloads" hidden>
         <span role="status"></span>
         <progress aria-label="Progresso dos downloads"></progress>
@@ -96,6 +111,7 @@
         <article id="details-hero" class="details-hero is-empty">
           <div class="hero-media">
             <img id="details-bg" alt="" />
+            <div id="details-hero-video" class="hero-video-container" hidden></div>
             <div class="hero-shade"></div>
           </div>
           <div class="hero-placeholder" id="details-placeholder">
@@ -110,8 +126,7 @@
             </div>
             <div class="hero-actions">
               <button id="details-play" class="play-button" type="button">▶ JOGAR</button>
-              <button id="details-launch-options" class="ghost-button compact" type="button">Propriedades…</button>
-              <button id="details-trailer" class="ghost-button compact" type="button" hidden>▶ Trailer</button>
+              <button id="details-launch-options" class="ghost-button compact" type="button">Propriedades</button>
             </div>
             <div id="details-compatibility" class="compatibility-banners" aria-live="polite" hidden></div>
             <div class="game-information">
@@ -119,7 +134,6 @@
                 <h2 id="details-about-title">Sobre o jogo</h2>
                 <p id="details-description" class="game-synopsis"></p>
                 <div id="details-tags" class="game-tag-section" hidden></div>
-                <div id="details-trailer-player" class="trailer-player" hidden></div>
               </section>
               <div class="game-facts">
                 <div id="details-facts"></div>
@@ -231,6 +245,12 @@
               </select>
             </label>
             <p>O Big Picture continua disponível pelo botão no topo ou pela tecla de tela cheia.</p>
+          </fieldset>
+          <fieldset class="desktop-group">
+            <legend>Trailers em segundo plano</legend>
+            <label class="plugin-checkbox"><input id="appearance-bg-trailer" type="checkbox"> Reproduzir trailers automaticamente no painel Detalhes</label>
+            <label class="plugin-checkbox"><input id="appearance-bp-trailer" type="checkbox"> Reproduzir trailers automaticamente no modo Big Picture</label>
+            <p>Os trailers rodam no fundo sem áudio para não interromper sua navegação.</p>
           </fieldset>
           <fieldset class="desktop-group">
             <legend>Desempenho</legend>

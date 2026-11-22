@@ -367,6 +367,8 @@ export function setupIntegrations(options: Options) {
       element<HTMLSelectElement>("appearance-view").value = settings.view_mode;
       element<HTMLInputElement>("appearance-transitions").checked = settings.transitions;
       element<HTMLInputElement>("appearance-gpu").checked = settings.gpu_acceleration;
+      element<HTMLInputElement>("appearance-bg-trailer").checked = settings.background_trailer;
+      element<HTMLInputElement>("appearance-bp-trailer").checked = settings.big_picture_trailer;
       statusLine.textContent = "";
     } catch (error) {
       statusLine.textContent = options.error(error);
@@ -659,6 +661,8 @@ export function setupIntegrations(options: Options) {
       view_mode: element<HTMLSelectElement>("appearance-view").value,
       transitions: element<HTMLInputElement>("appearance-transitions").checked,
       gpu_acceleration: element<HTMLInputElement>("appearance-gpu").checked,
+      background_trailer: element<HTMLInputElement>("appearance-bg-trailer").checked,
+      big_picture_trailer: element<HTMLInputElement>("appearance-bp-trailer").checked,
     };
     statusLine.textContent = "Salvando…";
     await Host.SaveUISettings(settings);

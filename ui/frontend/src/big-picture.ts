@@ -76,8 +76,17 @@ export function createBigPicture(options: BigPictureOptions): BigPictureControll
     return games[index] || null;
   }
 
-  function renderVideo(game: Game): void {
+  async function renderVideo(game: Game): Promise<void> {
     video.replaceChildren();
+    try {
+      const settings = await Host.GetUISettings();
+      if (!settings.big_picture_trailer) {
+        video.hidden = true;
+        return;
+      }
+    } catch {
+      // continua se não conseguir ler
+    }
     const url = trailerEmbedURL(game.trailer_url || "", {
       autoplay: true,
       muted: true,

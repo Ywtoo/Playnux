@@ -152,6 +152,9 @@ export function plainText(value: string): string {
 }
 
 export function canLaunch(game: Game): boolean {
+  if (!game.is_installed) {
+    return false;
+  }
   const key = keyOf(game);
   if (key === "xbox") {
     return false;
@@ -163,6 +166,9 @@ export function canLaunch(game: Game): boolean {
 }
 
 export function launchBlockReason(game: Game): string {
+  if (!game.is_installed) {
+    return "Jogo não instalado na máquina";
+  }
   const key = keyOf(game);
   if (key === "xbox") {
     return "Jogos Xbox não executam nativamente no Linux";

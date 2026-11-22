@@ -178,11 +178,19 @@ export class PlaynuxGameCardElement extends HTMLElement {
     this.badge.textContent = sourceLabel(game);
 
     const launchable = canLaunch(game);
-    this.playButton.disabled = !launchable;
-    this.playButton.title = launchable
-      ? `Jogar ${game.name}`
-      : launchBlockReason(game);
-    this.playButton.setAttribute("aria-label", `Jogar ${game.name}`);
+    this.playButton.disabled = false;
+    if (!game.is_installed) {
+      this.playButton.textContent = "⬇";
+      this.playButton.title = `Instalar ${game.name}`;
+      this.playButton.setAttribute("aria-label", `Instalar ${game.name}`);
+    } else {
+      this.playButton.textContent = "▶";
+      this.playButton.disabled = !launchable;
+      this.playButton.title = launchable
+        ? `Jogar ${game.name}`
+        : launchBlockReason(game);
+      this.playButton.setAttribute("aria-label", `Jogar ${game.name}`);
+    }
     this.frame.setAttribute("aria-label", `Abrir detalhes de ${game.name}`);
 
     this.fallbackText.textContent = initials(game.name);

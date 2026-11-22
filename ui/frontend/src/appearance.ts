@@ -3,6 +3,8 @@ export interface UISettingsLike {
   view_mode: string;
   gpu_acceleration: boolean;
   transitions: boolean;
+  background_trailer?: boolean;
+  big_picture_trailer?: boolean;
 }
 
 export const DEFAULT_UI_SETTINGS: UISettingsLike = {
@@ -10,6 +12,8 @@ export const DEFAULT_UI_SETTINGS: UISettingsLike = {
   view_mode: "details",
   gpu_acceleration: true,
   transitions: true,
+  background_trailer: true,
+  big_picture_trailer: true,
 };
 
 export function applyUISettings(settings: UISettingsLike | null | undefined): UISettingsLike {

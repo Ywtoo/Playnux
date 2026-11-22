@@ -13,8 +13,10 @@ import (
 const (
 	settingUITheme       = "ui.theme"
 	settingUIView        = "ui.view_mode"
-	settingUIGPU         = "ui.gpu_acceleration"
-	settingUITransitions = "ui.transitions"
+	settingUIGPU             = "ui.gpu_acceleration"
+	settingUITransitions     = "ui.transitions"
+	settingUIBackgroundTrailer = "ui.background_trailer"
+	settingUIBigPictureTrailer = "ui.big_picture_trailer"
 
 	ThemePlayniteDark = "theme-playnite-dark"
 	ThemeSteam        = "theme-steam"
@@ -23,19 +25,23 @@ const (
 // UISettings holds appearance and performance preferences. The frontend applies
 // theme and animation classes; the Core persists them in SQLite.
 type UISettings struct {
-	Theme           string `json:"theme"`
-	ViewMode        string `json:"view_mode"`
-	GPUAcceleration bool   `json:"gpu_acceleration"`
-	Transitions     bool   `json:"transitions"`
+	Theme             string `json:"theme"`
+	ViewMode          string `json:"view_mode"`
+	GPUAcceleration   bool   `json:"gpu_acceleration"`
+	Transitions       bool   `json:"transitions"`
+	BackgroundTrailer bool   `json:"background_trailer"`
+	BigPictureTrailer bool   `json:"big_picture_trailer"`
 }
 
 // DefaultUISettings returns the visual defaults used when no preference exists.
 func DefaultUISettings() UISettings {
 	return UISettings{
-		Theme:           ThemePlayniteDark,
-		ViewMode:        "details",
-		GPUAcceleration: true,
-		Transitions:     true,
+		Theme:             ThemePlayniteDark,
+		ViewMode:          "details",
+		GPUAcceleration:   true,
+		Transitions:       true,
+		BackgroundTrailer: true,
+		BigPictureTrailer: true,
 	}
 }
 
@@ -62,6 +68,16 @@ func (c *App) UISettings(ctx context.Context) (UISettings, error) {
 	} else if !errors.Is(err, database.ErrSettingNotFound) {
 		return settings, err
 	}
+	if raw, err := c.db.GetSetting(ctx, settingUIBackgroundTrailer); err == nil {
+		_ = json.Unmarshal([]byte(raw), &settings.BackgroundTrailer)
+	} else if !errors.Is(err, database.ErrSettingNotFound) {
+		return settings, err
+	}
+	if raw, err := c.db.GetSetting(ctx, settingUIBigPictureTrailer); err == nil {
+		_ = json.Unmarshal([]byte(raw), &settings.BigPictureTrailer)
+	} else if !errors.Is(err, database.ErrSettingNotFound) {
+		return settings, err
+	}
 	return NormalizeUISettings(settings), nil
 }
 
@@ -76,11 +92,21 @@ func (c *App) SaveUISettings(ctx context.Context, settings UISettings) error {
 	if err != nil {
 		return err
 	}
+	bgTrailer, err := json.Marshal(settings.BackgroundTrailer)
+	if err != nil {
+		return err
+	}
+	bpTrailer, err := json.Marshal(settings.BigPictureTrailer)
+	if err != nil {
+		return err
+	}
 	values := map[string]string{
-		settingUITheme:       settings.Theme,
-		settingUIView:        settings.ViewMode,
-		settingUIGPU:         string(gpu),
-		settingUITransitions: string(transitions),
+		settingUITheme:             settings.Theme,
+		settingUIView:              settings.ViewMode,
+		settingUIGPU:               string(gpu),
+		settingUITransitions:       string(transitions),
+		settingUIBackgroundTrailer: string(bgTrailer),
+		settingUIBigPictureTrailer: string(bpTrailer),
 	}
 	for key, value := range values {
 		if err := c.db.SetSetting(ctx, key, value); err != nil {
@@ -101,10 +127,12 @@ func NormalizeUISettings(settings UISettings) UISettings {
 		view = "details"
 	}
 	return UISettings{
-		Theme:           theme,
-		ViewMode:        view,
-		GPUAcceleration: settings.GPUAcceleration,
-		Transitions:     settings.Transitions,
+		Theme:             theme,
+		ViewMode:          view,
+		GPUAcceleration:   settings.GPUAcceleration,
+		Transitions:       settings.Transitions,
+		BackgroundTrailer: settings.BackgroundTrailer,
+		BigPictureTrailer: settings.BigPictureTrailer,
 	}
 }
 

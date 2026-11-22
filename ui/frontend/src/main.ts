@@ -56,8 +56,7 @@ const detailsBg = element<HTMLImageElement>("details-bg");
 const detailsLogo = element<HTMLImageElement>("details-logo");
 const detailsTitle = element<HTMLElement>("details-title");
 const detailsPlay = element<HTMLButtonElement>("details-play");
-const detailsTrailer = element<HTMLButtonElement>("details-trailer");
-const detailsTrailerPlayer = element<HTMLElement>("details-trailer-player");
+const detailsHeroVideo = element<HTMLElement>("details-hero-video");
 const detailsDescription = element<HTMLElement>("details-description");
 const detailsFacts = element<HTMLElement>("details-facts");
 const detailsCompatibility = element<HTMLElement>("details-compatibility");
@@ -524,9 +523,36 @@ async function selectDetails(game: Game, fetch = true): Promise<void> {
   }
 }
 
+let trailerTimer: ReturnType<typeof setTimeout> | null = null;
+
 function resetDetailsTrailer(): void {
-  detailsTrailerPlayer.replaceChildren();
-  detailsTrailerPlayer.hidden = true;
+  if (trailerTimer) {
+    clearTimeout(trailerTimer);
+    trailerTimer = null;
+  }
+  detailsHeroVideo.replaceChildren();
+  detailsHeroVideo.hidden = true;
+}
+
+function scheduleBackgroundTrailer(url: string): void {
+  resetDetailsTrailer();
+  if (!url) return;
+  trailerTimer = setTimeout(async () => {
+    try {
+      const settings = await HostService.GetUISettings();
+      if (!settings.background_trailer) return;
+      const embed = trailerEmbedURL(url, { autoplay: true, muted: true, background: true });
+      if (!embed || !detailsHeroVideo) return;
+      const frame = document.createElement("iframe");
+      frame.src = embed;
+      frame.allow = "autoplay";
+      frame.title = "Background Trailer";
+      detailsHeroVideo.replaceChildren(frame);
+      detailsHeroVideo.hidden = false;
+    } catch {
+      // Ignora erro se falhar reprodução de fundo
+    }
+  }, 2200);
 }
 
 function renderDetails(): void {
@@ -569,15 +595,22 @@ function renderDetails(): void {
   }
 
   const launchable = canLaunch(game);
-  detailsPlay.disabled = !launchable || launching;
-  detailsPlay.textContent = launching ? "INICIANDO…" : launchable ? "▶ JOGAR" : "INDISPONÍVEL";
-  detailsPlay.title = launchable ? `Jogar ${game.name}` : launchBlockReason(game);
-  detailsPlay.classList.toggle("is-disabled", !launchable);
+  detailsPlay.disabled = launching;
+  if (!game.is_installed) {
+    detailsPlay.textContent = "INSTALAR";
+    detailsPlay.title = `Instalar ${game.name} pelo cliente ou adicionar executável`;
+    detailsPlay.classList.add("is-install");
+    detailsPlay.classList.remove("is-disabled");
+  } else {
+    detailsPlay.textContent = launching ? "INICIANDO…" : launchable ? "▶ JOGAR" : "INDISPONÍVEL";
+    detailsPlay.title = launchable ? `Jogar ${game.name}` : launchBlockReason(game);
+    detailsPlay.classList.remove("is-install");
+    detailsPlay.classList.toggle("is-disabled", !launchable);
+  }
 
   renderGameInformation(game, detailsDescription, detailsFacts, element("details-tags"));
 
-  resetDetailsTrailer();
-  detailsTrailer.hidden = !game.trailer_url;
+  scheduleBackgroundTrailer(game.trailer_url);
 
   renderCompatibility(detailsCompatibility, game, showToast);
 
@@ -588,25 +621,7 @@ function renderDetails(): void {
   detailsBody.classList.add("is-entering");
 }
 
-function playDetailsTrailer(): void {
-  if (!detailsGame?.trailer_url) {
-    return;
-  }
-  const url = trailerEmbedURL(detailsGame.trailer_url);
-  if (!url) {
-    window.open(detailsGame.trailer_url, "_blank", "noopener");
-    return;
-  }
-  const frame = document.createElement("iframe");
-  frame.src = url;
-  frame.title = `Trailer de ${detailsGame.name}`;
-  frame.allow = "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture";
-  frame.allowFullscreen = true;
-  frame.referrerPolicy = "strict-origin-when-cross-origin";
-  detailsTrailerPlayer.replaceChildren(frame);
-  detailsTrailerPlayer.hidden = false;
-  detailsTrailerPlayer.scrollIntoView({ block: "nearest" });
-}
+
 
 
 
@@ -614,8 +629,14 @@ function playDetailsTrailer(): void {
 
 function setDrawerPlayButton(game: Game): void {
   const launchable = canLaunch(game);
+  drawerPlay.disabled = launching;
+  if (!game.is_installed) {
+    drawerPlay.textContent = "Instalar";
+    drawerPlay.title = `Instalar ${game.name}`;
+    drawerPlay.classList.add("secondary");
+    return;
+  }
   drawerPlay.classList.toggle("secondary", !launchable);
-  drawerPlay.disabled = !launchable || launching;
   if (!launchable) {
     drawerPlay.textContent = "Indisponível";
     drawerPlay.title = launchBlockReason(game);
@@ -1070,7 +1091,6 @@ function setupEventListeners(): void {
       void launchGame(detailsGame, "details");
     }
   });
-  detailsTrailer.addEventListener("click", playDetailsTrailer);
 
   drawerPlay.addEventListener("click", () => {
     if (selectedGame) {
@@ -1102,8 +1122,55 @@ function setupEventListeners(): void {
   applyZoom();
   gridZoom.addEventListener("input", applyZoom);
 
-  addLocalFolder.addEventListener("click", () => {
+  // System Menu Dropdown
+  const systemMenuTrigger = element<HTMLButtonElement>("system-menu-trigger");
+  const systemMenuPopover = element<HTMLElement>("system-menu-popover");
+
+  const toggleSystemMenu = (open?: boolean) => {
+    const isExpanded = systemMenuTrigger.getAttribute("aria-expanded") === "true";
+    const next = typeof open === "boolean" ? open : !isExpanded;
+    systemMenuTrigger.setAttribute("aria-expanded", String(next));
+    systemMenuPopover.hidden = !next;
+  };
+
+  systemMenuTrigger.addEventListener("click", (e) => {
+    e.stopPropagation();
+    toggleSystemMenu();
+  });
+
+  document.addEventListener("click", (e) => {
+    if (!systemMenuTrigger.contains(e.target as Node) && !systemMenuPopover.contains(e.target as Node)) {
+      toggleSystemMenu(false);
+    }
+  });
+
+  element("menu-add-game").addEventListener("click", () => {
+    toggleSystemMenu(false);
+    openManualDialog();
+  });
+  element("menu-scan-local").addEventListener("click", () => {
+    toggleSystemMenu(false);
     void openFolderDialog("local");
+  });
+  element("menu-scan-roms").addEventListener("click", () => {
+    toggleSystemMenu(false);
+    void openFolderDialog("rom");
+  });
+  element("menu-metadata").addEventListener("click", () => {
+    toggleSystemMenu(false);
+    metadataButton.click();
+  });
+  element("menu-plugins").addEventListener("click", () => {
+    toggleSystemMenu(false);
+    integrations.open("stores");
+  });
+  element("menu-settings").addEventListener("click", () => {
+    toggleSystemMenu(false);
+    integrations.open("appearance");
+  });
+  element("menu-big-picture").addEventListener("click", () => {
+    toggleSystemMenu(false);
+    openBigPicture();
   });
   addRomFolder.addEventListener("click", () => {
     void openFolderDialog("rom");
