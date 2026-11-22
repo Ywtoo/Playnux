@@ -20,9 +20,12 @@ const STATUS_LABELS: Record<string, string> = {
 
 /** Builds an anti-cheat status/warning banner. Returns null when not relevant. */
 export function renderAntiCheatBanner(info: AntiCheatInfo | null | undefined): HTMLElement | null {
-  const risk = info && info.found && !info.error && info.anticheats?.length
-    ? (info.risk || (info.warning ? "warning" : "safe")).toLowerCase()
-    : "safe";
+  // Se o jogo não usa anti-cheat ou não está catalogado, não mostra badge para não poluir
+  if (!info || !info.found || info.error || !(info.anticheats?.length)) {
+    return null;
+  }
+
+  const risk = (info.risk || (info.warning ? "warning" : "safe")).toLowerCase();
 
   const banner = document.createElement("div");
   banner.className = `anticheat-chip risk-${risk}`;
@@ -30,16 +33,6 @@ export function renderAntiCheatBanner(info: AntiCheatInfo | null | undefined): H
 
   const badge = document.createElement("span");
   badge.className = `anticheat-badge badge-${risk}`;
-  
-  if (!info || !info.found || !(info.anticheats?.length)) {
-    badge.textContent = "Sem Anti-Cheat";
-    banner.setAttribute("aria-label", "Anti-Cheat: Este jogo não necessita de anti-cheat.");
-    const tooltip = document.createElement("div");
-    tooltip.className = "compat-tooltip";
-    tooltip.textContent = "Este jogo roda nativamente ou via Proton sem restrições de anti-cheat.";
-    banner.append(badge, tooltip);
-    return banner;
-  }
 
   const cheats = info.anticheats.join(" + ");
   const status = STATUS_LABELS[(info.status || "").toLowerCase()] ?? info.status ?? "";

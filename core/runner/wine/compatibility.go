@@ -47,6 +47,9 @@ func DiscoverRunners() []Runner {
 	runners := make([]Runner, 0, 8)
 	addProton := func(path string) {
 		path = filepath.Clean(path)
+		if real, err := filepath.EvalSymlinks(path); err == nil {
+			path = real
+		}
 		if seen[path] {
 			return
 		}
