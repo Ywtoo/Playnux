@@ -87,7 +87,6 @@ const drawerTrailerPlay = element<HTMLButtonElement>("drawer-trailer-play");
 const drawerTrailerPlayer = element<HTMLElement>("drawer-trailer-player");
 const drawerCompatibility = element<HTMLElement>("drawer-compatibility");
 
-const addLocalFolder = element<HTMLButtonElement>("add-local-folder");
 const addRomFolder = element<HTMLButtonElement>("add-rom-folder");
 const folderDialog = element<HTMLDialogElement>("folder-dialog");
 const folderForm = element<HTMLFormElement>("folder-form");
@@ -1158,7 +1157,7 @@ function setupEventListeners(): void {
   });
   element("menu-metadata").addEventListener("click", () => {
     toggleSystemMenu(false);
-    metadataButton.click();
+    integrations.openMetadata();
   });
   element("menu-plugins").addEventListener("click", () => {
     toggleSystemMenu(false);

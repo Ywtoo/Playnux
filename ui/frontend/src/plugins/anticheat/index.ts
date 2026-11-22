@@ -1,5 +1,3 @@
-import { Browser } from "@wailsio/runtime";
-
 export interface AntiCheatInfo {
   found: boolean;
   name?: string;

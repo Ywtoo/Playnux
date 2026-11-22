@@ -1,4 +1,5 @@
 import { Window } from "@wailsio/runtime";
+import * as Host from "../bindings/github.com/playnux/ui/host/host.js";
 import type { Game } from "../bindings/github.com/playnux/core/models/models";
 import {
   canLaunch,

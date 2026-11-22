@@ -1,11 +1,11 @@
 export interface UISettingsLike {
   theme: string;
   view_mode: string;
-  font_size?: string;
+  font_size: string;
   gpu_acceleration: boolean;
   transitions: boolean;
-  background_trailer?: boolean;
-  big_picture_trailer?: boolean;
+  background_trailer: boolean;
+  big_picture_trailer: boolean;
 }
 
 export const DEFAULT_UI_SETTINGS: UISettingsLike = {
