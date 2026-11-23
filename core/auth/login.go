@@ -66,6 +66,9 @@ func (m *Manager) Login(ctx context.Context, pluginID string) (*models.Session, 
 		return nil, nil, fmt.Errorf("loja %s não suporta login por WebView", provider.Name())
 	}
 	spec := web.WebLogin()
+	if spec.UnavailableReason != "" {
+		return nil, nil, errors.New(spec.UnavailableReason)
+	}
 	if spec.URL == "" {
 		return nil, nil, fmt.Errorf("loja %s não definiu a URL de login", provider.Name())
 	}

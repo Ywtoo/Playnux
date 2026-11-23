@@ -11,6 +11,7 @@ import steamgriddb from "./steamgriddb/settings.html?raw";
 import { properties as steamProperties, setup as setupSteam } from "./steam";
 import { setup as setupLinux } from "./linux";
 import { setup as setupEmulation } from "./emulation";
+import { setup as setupXbox } from "./xbox";
 import { setupStoreLogin } from "./store-login";
 import type { SettingsContext, SettingsProperty } from "./settings";
 
@@ -33,7 +34,7 @@ export const libraryPlugins: Partial<Record<string, LibraryPluginSettings>> = {
   },
   epic: { view: epic, source: t("Epic Games, Heroic, and Legendary"), importsInstalled: true, setup: setupStoreLogin },
   gog: { view: gog, source: t("GOG and Heroic"), importsInstalled: true, setup: setupStoreLogin },
-  xbox: { view: xbox, source: t("Microsoft account"), setup: setupStoreLogin },
+  xbox: { view: xbox, source: t("Microsoft account"), setup: setupXbox },
   linux: { view: linux, source: t("Linux shortcuts, Flatpaks, and game folders"), local: true, setup: setupLinux },
   emulation: { view: emulation, source: t("ROM folders"), local: true, setup: setupEmulation },
 };

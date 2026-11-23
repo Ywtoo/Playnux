@@ -114,6 +114,22 @@ func TestFetchLibraryMergesCloudAndLocal(t *testing.T) {
 		if r.Header.Get("Authorization") != "bearer token-123" {
 			t.Errorf("authorization = %q", r.Header.Get("Authorization"))
 		}
+		if r.URL.Path == "/catalog/api/shared/namespace/store/bulk/items" {
+			switch r.URL.Query().Get("id") {
+			case "owned-game":
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"owned-game": map[string]string{"title": "Resolved Game"},
+				})
+			case "owned-addon":
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"owned-addon": map[string]string{"title": "Extra Map", "itemType": "DLC"},
+				})
+			default:
+				t.Errorf("unexpected catalog item: %q", r.URL.Query().Get("id"))
+				http.NotFound(w, r)
+			}
+			return
+		}
 		if r.URL.Path != "/library/api/public/items" {
 			t.Errorf("path inesperado: %s", r.URL.Path)
 			http.NotFound(w, r)
@@ -159,6 +175,8 @@ func TestFetchLibraryMergesCloudAndLocal(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"records": []map[string]any{
 				{"appName": "aabbccddeeff00112233445566778899", "title": "Third Game"},
+				{"appName": "opaque-game-id", "namespace": "store", "catalogItemId": "owned-game"},
+				{"appName": "opaque-addon-id", "namespace": "store", "catalogItemId": "owned-addon"},
 				{"appName": "aa00112233445566778899aabbccddff"},
 				{"catalogItemId": "entitlement-without-app", "title": "Build Interno"},
 				{"appName": "MarketplaceProduct", "namespace": "ue", "title": "Marketplace"},
@@ -179,6 +197,7 @@ func TestFetchLibraryMergesCloudAndLocal(t *testing.T) {
 	})
 	provider.client = server.Client()
 	provider.libraryBase = server.URL
+	provider.catalogBase = server.URL
 
 	ctx := context.Background()
 	if err := provider.Authenticate(ctx, store.StoreAuth{AccessToken: "token-123"}); err != nil {
@@ -189,8 +208,8 @@ func TestFetchLibraryMergesCloudAndLocal(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(games) != 3 {
-		t.Fatalf("esperava 3 jogos, obtive %d", len(games))
+	if len(games) != 4 {
+		t.Fatalf("esperava 4 jogos, obtive %d", len(games))
 	}
 	if atomic.LoadInt32(&pageCalls) != 2 {
 		t.Fatalf("paginação não percorreu 2 páginas (%d)", pageCalls)
@@ -199,6 +218,9 @@ func TestFetchLibraryMergesCloudAndLocal(t *testing.T) {
 	byID := map[string]int{}
 	for i, game := range games {
 		byID[game.GameID] = i
+	}
+	if i, ok := byID["opaque-game-id"]; !ok || games[i].Name != "Resolved Game" {
+		t.Fatal("catalog did not resolve the owned game")
 	}
 
 	sugar := games[byID["Sugar"]]

@@ -42,6 +42,18 @@ func TestWebLoginUsesPublicClientAndLoopback(t *testing.T) {
 	}
 }
 
+func TestWebLoginRequiresConfiguredClient(t *testing.T) {
+	t.Setenv("PLAYNUX_XBOX_CLIENT_ID", "")
+	provider := NewXboxProvider()
+	spec := provider.WebLogin()
+	if spec.URL != "" || spec.UnavailableReason == "" {
+		t.Fatalf("unexpected login spec without Xbox credentials: %+v", spec)
+	}
+	if _, err := provider.ExchangeCode(context.Background(), "unused"); err == nil || err.Error() != spec.UnavailableReason {
+		t.Fatalf("expected missing Microsoft registration error, got %v", err)
+	}
+}
+
 func TestExchangeAndRefreshToken(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if err := r.ParseForm(); err != nil {

@@ -311,7 +311,8 @@ export function setupIntegrations(options: Options) {
         indicator.dataset.connected = String(store.connected);
         indicator.setAttribute("aria-hidden", "true");
         item.replaceChildren(name, indicator);
-        item.title = store.connected ? t("Account connected") : t("Account not connected");
+        item.title = store.login_unavailable_reason ? t("Unavailable") :
+          store.connected ? t("Account connected") : t("Account not connected");
       }
       if (currentPanel === "stores" && store.id === activeStore) item.setAttribute("aria-current", "page");
       return item;
@@ -331,10 +332,14 @@ export function setupIntegrations(options: Options) {
     const plugin = libraryPlugins[selected.id];
     const local = plugin?.local;
     storeSource.textContent = plugin?.source ?? t("Online library");
-    setSettingState(storeState,
-      local ? t("Local source") : selected.connected ? t("Account connected") : t("Account not connected"),
-      local ? "local" : selected.connected ? "ready" : "pending",
-    );
+    if (selected.login_unavailable_reason) {
+      setSettingState(storeState, t("Unavailable"), "unavailable");
+    } else {
+      setSettingState(storeState,
+        local ? t("Local source") : selected.connected ? t("Account connected") : t("Account not connected"),
+        local ? "local" : selected.connected ? "ready" : "pending",
+      );
+    }
     const properties: SettingsProperty[] = [
       ...(plugin?.properties?.(selected) ?? []),
       ...(selected.clients ?? []).map((client): SettingsProperty => ({

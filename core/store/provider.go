@@ -49,6 +49,7 @@ type WebLoginSpec struct {
 	URL               string
 	CookieNames       []string
 	RedirectURLPrefix string
+	UnavailableReason string
 }
 
 // WebAuthenticator é implementada por lojas cujo login acontece em uma WebView.

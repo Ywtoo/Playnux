@@ -67,13 +67,13 @@ To verify downloads against `SHA256SUMS`, run this in the download directory:
 sha256sum --check --ignore-missing SHA256SUMS
 ```
 
-## Metadata and API keys
+## Optional API keys
 
-Playnux fetches game information and artwork from IGDB and SteamGridDB. For now, both services use **your own API keys**:
+You can import and launch games without setting up API keys. Each key enables a specific integration.
 
-1. Create a key on each service (IGDB through Twitch, SteamGridDB in your account preferences).
-2. In Playnux, open **Settings → Metadata**.
-3. Paste the keys for IGDB and SteamGridDB.
+- **Steam Web API** adds owned games to the library import through Valve's API. To try the local import first, open **Settings → Steam**, click **Use this PC’s account**, leave the API key blank, and click **Save account and sync**. Playnux imports installed games and also tries to read your public Steam library when available. [Get a Steam Web API key](https://steamcommunity.com/dev/apikey)
+- **SteamGridDB** adds cover art, logos, and backgrounds. Generate a key in your SteamGridDB account preferences and paste it in **Settings → SteamGridDB**. [Get a SteamGridDB API key](https://www.steamgriddb.com/profile/preferences/api)
+- **IGDB** adds game information such as descriptions and genres. Register an app through Twitch and enter its Client ID and Client Secret in **Settings → IGDB**. [Twitch Developer Console](https://dev.twitch.tv/console/apps) · [IGDB setup guide](https://api-docs.igdb.com/#getting-started)
 
 Keys are stored only on your machine. I’ll explore whether a metadata service just for Playnux could remove the need for personal keys and compare approaches before choosing one. See the [roadmap](docs/ROADMAP.md).
 

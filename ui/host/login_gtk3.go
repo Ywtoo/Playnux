@@ -46,8 +46,11 @@ func embeddedStoreLogin(ctx context.Context, parent *application.WebviewWindow, 
 	handle := cgo.NewHandle(login)
 	defer handle.Delete()
 	title := "Entrar na Epic Games"
-	if req.PluginID == "gog" {
+	switch req.PluginID {
+	case "gog":
 		title = "Entrar na GOG"
+	case "xbox":
+		title = "Playnux — Microsoft"
 	}
 
 	// Epic returns an authorization code in the response body. The script

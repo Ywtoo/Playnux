@@ -21,14 +21,10 @@ import (
 	"github.com/playnux/core/store"
 )
 
-// O PrismLauncher registra um aplicativo público com redirect de loopback e o
-// escopo XboxLive.signin. Usar esse client evita exigir que cada usuário crie
-// um registro no Azure; quem preferir pode sobrescrever via variáveis de
-// ambiente com o próprio aplicativo.
 const (
-	defaultClientID    = "c36a9fb6-4f2a-41ff-90bd-ae7cc92031eb"
 	defaultRedirectURI = "http://127.0.0.1:1"
 	oauthScope         = "XboxLive.signin offline_access"
+	loginUnavailable   = "Xbox sign-in is unavailable. Playnux needs its own Microsoft app registration with Xbox access."
 
 	defaultAuthorizeBase = "https://login.microsoftonline.com/consumers/oauth2/v2.0/authorize"
 	defaultTokenBase     = "https://login.microsoftonline.com/consumers/oauth2/v2.0/token"
@@ -57,7 +53,7 @@ type XboxProvider struct {
 func NewXboxProvider() *XboxProvider {
 	return &XboxProvider{
 		client:        &http.Client{Timeout: 30 * time.Second},
-		clientID:      envOr("PLAYNUX_XBOX_CLIENT_ID", defaultClientID),
+		clientID:      envOr("PLAYNUX_XBOX_CLIENT_ID", ""),
 		redirectURI:   envOr("PLAYNUX_XBOX_REDIRECT_URI", defaultRedirectURI),
 		authorizeBase: defaultAuthorizeBase,
 		tokenBase:     defaultTokenBase,
@@ -82,6 +78,9 @@ func (x *XboxProvider) Name() string { return "Xbox / Microsoft Store" }
 // o loopback registrado no client público; a ponte da UI captura a URL antes
 // de a navegação ser concluída.
 func (x *XboxProvider) WebLogin() store.WebLoginSpec {
+	if x.clientID == "" {
+		return store.WebLoginSpec{UnavailableReason: loginUnavailable}
+	}
 	query := url.Values{
 		"client_id":     {x.clientID},
 		"response_type": {"code"},
@@ -96,6 +95,9 @@ func (x *XboxProvider) WebLogin() store.WebLoginSpec {
 }
 
 func (x *XboxProvider) Authenticate(ctx context.Context, auth store.StoreAuth) error {
+	if x.clientID == "" {
+		return fmt.Errorf("%s", loginUnavailable)
+	}
 	if auth.AccessToken == "" && auth.RefreshToken == "" {
 		return fmt.Errorf("xbox: access token ou refresh token obrigatório")
 	}
@@ -157,6 +159,9 @@ type tokenResponse struct {
 }
 
 func (x *XboxProvider) requestToken(ctx context.Context, form url.Values) (store.StoreAuth, error) {
+	if x.clientID == "" {
+		return store.StoreAuth{}, fmt.Errorf("%s", loginUnavailable)
+	}
 	form.Set("client_id", x.clientID)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, x.tokenBase,
 		strings.NewReader(form.Encode()))

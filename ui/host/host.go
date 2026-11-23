@@ -318,7 +318,7 @@ func (h *Host) OpenLogin(ctx context.Context, req auth.LoginRequest) (auth.Login
 	if app == nil {
 		return auth.LoginResult{}, fmt.Errorf("janela Wails ainda não inicializada")
 	}
-	if (req.PluginID == "epic" || req.PluginID == "gog") && parent != nil {
+	if (req.PluginID == "epic" || req.PluginID == "gog" || req.PluginID == "xbox") && parent != nil {
 		if result, err, supported := embeddedStoreLogin(ctx, parent, req); supported {
 			return result, err
 		}

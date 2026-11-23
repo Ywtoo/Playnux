@@ -25,6 +25,7 @@ const (
 
 	epicOAuthBase   = "https://account-public-service-prod03.ol.epicgames.com"
 	epicLibraryBase = "https://library-service.live.use1a.on.epicgames.com"
+	epicCatalogBase = "https://catalog-public-service-prod06.ol.epicgames.com"
 
 	epicCoverTypes      = "DieselGameBoxTall"
 	epicBackgroundTypes = "DieselGameBox"
@@ -36,6 +37,7 @@ type EpicProvider struct {
 	client             *http.Client
 	oauthBase          string
 	libraryBase        string
+	catalogBase        string
 }
 
 func NewEpicProvider() *EpicProvider {
@@ -43,6 +45,7 @@ func NewEpicProvider() *EpicProvider {
 		client:      &http.Client{Timeout: 20 * time.Second},
 		oauthBase:   epicOAuthBase,
 		libraryBase: epicLibraryBase,
+		catalogBase: epicCatalogBase,
 	}
 }
 
@@ -251,6 +254,7 @@ type epicRecord struct {
 	ProductName   string       `json:"productName"`
 	Namespace     string       `json:"namespace"`
 	SandboxType   string       `json:"sandboxType"`
+	Country       string       `json:"country"`
 	Metadata      *epicCatalog `json:"metadata"`
 	CatalogItem   *epicCatalog `json:"catalogItem"`
 }
@@ -316,7 +320,7 @@ func IsUnresolvedImport(game *models.Game) bool {
 }
 
 func (e *EpicProvider) fetchDigitalLibrary(ctx context.Context) ([]*models.Game, error) {
-	var games []*models.Game
+	var records []epicRecord
 	cursor := ""
 	seen := make(map[string]bool)
 
@@ -350,11 +354,7 @@ func (e *EpicProvider) fetchDigitalLibrary(ctx context.Context) ([]*models.Game,
 		if err := json.Unmarshal(body, &page); err != nil {
 			return nil, err
 		}
-		for _, record := range page.Records {
-			if game := gameFromRecord(record); game != nil {
-				games = append(games, game)
-			}
-		}
+		records = append(records, page.Records...)
 
 		next := page.ResponseMetadata.NextCursor
 		if next == "" || seen[next] {
@@ -364,24 +364,51 @@ func (e *EpicProvider) fetchDigitalLibrary(ctx context.Context) ([]*models.Game,
 		cursor = next
 	}
 
-	return games, nil
+	var games []*models.Game
+	var unresolved []epicRecord
+	for _, record := range records {
+		if game := gameFromRecord(record); game != nil {
+			games = append(games, game)
+		} else if strings.TrimSpace(record.Namespace) != "" && strings.TrimSpace(record.CatalogItemID) != "" && record.isGameCandidate() {
+			unresolved = append(unresolved, record)
+		}
+	}
+	resolved, err := e.resolveCatalog(ctx, unresolved)
+	if err != nil {
+		return nil, err
+	}
+	return append(games, resolved...), nil
+}
+
+func (record epicRecord) isGameCandidate() bool {
+	gameID := strings.TrimSpace(record.AppName)
+	if gameID == "" || gameID == "1" || strings.EqualFold(record.Namespace, "ue") ||
+		strings.EqualFold(record.Namespace, "fab") || strings.EqualFold(record.SandboxType, "private") ||
+		isServiceEntry("", gameID) {
+		return false
+	}
+	for _, catalog := range record.catalogEntries() {
+		if catalog != nil && catalog.isExtra() {
+			return false
+		}
+	}
+	return true
+}
+
+func (record *epicRecord) catalogEntries() [3]*epicCatalog {
+	return [3]*epicCatalog{record.CatalogItem, record.Metadata, &record.epicCatalog}
 }
 
 func gameFromRecord(record epicRecord) *models.Game {
-	gameID := strings.TrimSpace(record.AppName)
-	if gameID == "" || gameID == "1" || strings.EqualFold(record.Namespace, "ue") ||
-		strings.EqualFold(record.Namespace, "fab") || strings.EqualFold(record.SandboxType, "private") {
+	if !record.isGameCandidate() {
 		return nil
 	}
-
+	gameID := strings.TrimSpace(record.AppName)
 	var name, description, developer string
 	var images []heroic.Image
-	for _, catalog := range []*epicCatalog{record.CatalogItem, record.Metadata, &record.epicCatalog} {
+	for _, catalog := range record.catalogEntries() {
 		if catalog == nil {
 			continue
-		}
-		if catalog.isExtra() {
-			return nil
 		}
 		title := strings.TrimSpace(catalog.Title)
 		if name == "" && !opaqueTitle(title) && !isServiceEntry(title, gameID) {

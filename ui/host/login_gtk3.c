@@ -47,7 +47,19 @@ static void on_root_destroy(GtkWidget *window, gpointer handle) {
 static GtkWidget *login_window(GtkWindow *parent, const char *title) {
     GtkWidget *window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
     gtk_window_set_title(GTK_WINDOW(window), title);
-    gtk_window_set_default_size(GTK_WINDOW(window), 920, 700);
+    int width = 920;
+    int height = 700;
+    GdkDisplay *display = gtk_widget_get_display(window);
+    GdkWindow *parent_window = parent ? gtk_widget_get_window(GTK_WIDGET(parent)) : NULL;
+    GdkMonitor *monitor = parent_window ? gdk_display_get_monitor_at_window(display, parent_window)
+                                        : gdk_display_get_primary_monitor(display);
+    if (monitor) {
+        GdkRectangle workarea;
+        gdk_monitor_get_workarea(monitor, &workarea);
+        width = MIN(width, MAX(1, workarea.width - 48));
+        height = MIN(height, MAX(1, workarea.height - 64));
+    }
+    gtk_window_set_default_size(GTK_WINDOW(window), width, height);
     if (parent) {
         gtk_window_set_transient_for(GTK_WINDOW(window), parent);
         gtk_window_set_destroy_with_parent(GTK_WINDOW(window), TRUE);

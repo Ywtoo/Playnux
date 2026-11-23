@@ -45,12 +45,13 @@ const (
 
 // StoreInfo é o estado resumido de uma loja para a barra lateral.
 type StoreInfo struct {
-	ID          string              `json:"id"`
-	Name        string              `json:"name"`
-	Connected   bool                `json:"connected"`
-	Clients     []ApplicationStatus `json:"clients"`
-	APIKeySaved bool                `json:"api_key_saved"`
-	AccountID   string              `json:"account_id,omitempty"`
+	ID                     string              `json:"id"`
+	Name                   string              `json:"name"`
+	Connected              bool                `json:"connected"`
+	Clients                []ApplicationStatus `json:"clients"`
+	APIKeySaved            bool                `json:"api_key_saved"`
+	AccountID              string              `json:"account_id,omitempty"`
+	LoginUnavailableReason string              `json:"login_unavailable_reason,omitempty"`
 }
 
 type ApplicationStatus struct {
@@ -671,9 +672,12 @@ func (c *App) Stores(ctx context.Context) []StoreInfo {
 		// Fontes locais não têm sessão; as demais aparecem desconectadas quando
 		// não há login persistido, sem impedir uma nova tentativa.
 		info := StoreInfo{ID: id, Name: provider.Name()}
+		if web, ok := provider.(store.WebAuthenticator); ok {
+			info.LoginUnavailableReason = web.WebLogin().UnavailableReason
+		}
 		if local, ok := provider.(store.LocalProvider); ok && local.IsLocal() {
 			info.Connected = true
-		} else if session, err := c.db.LoadSession(ctx, id); err == nil {
+		} else if session, err := c.db.LoadSession(ctx, id); err == nil && info.LoginUnavailableReason == "" {
 			info.Connected = true
 			info.APIKeySaved = session.APIKey != ""
 			if id == "steam" {
