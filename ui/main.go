@@ -39,12 +39,16 @@ func main() {
 	}
 	host.SetCore(service, core)
 
+	programName := os.Getenv("PLAYNUX_RUN_DESKTOP_ID")
+	if programName == "" {
+		programName = "playnux"
+	}
 	app := application.New(application.Options{
 		Name:        "Playnux",
 		Description: "Your game library on Linux",
 		Icon:        appIcon,
 		Linux: application.LinuxOptions{
-			ProgramName: "playnux",
+			ProgramName: programName,
 		},
 		Services: []application.Service{
 			application.NewService(service),

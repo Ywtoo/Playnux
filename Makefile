@@ -91,7 +91,7 @@ test: test-core test-ui
 # ── Run Application ─────────────────────────────────────────────────────────
 run: build
 	@echo "▶ Launching Playnux..."
-	@$(BUILD_DIR)/$(APP_NAME)
+	@sh "$(UI_DIR)/build/linux/run-local.sh" "$(abspath $(BUILD_DIR)/$(APP_NAME))" "$(abspath $(UI_DIR)/build/appicon.png)"
 
 # ── Frontend Dev Mode ───────────────────────────────────────────────────────
 dev:
