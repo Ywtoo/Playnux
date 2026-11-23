@@ -1,3 +1,4 @@
+import { t } from "../i18n";
 import type { StoreInfo } from "../../bindings/github.com/playnux/core/app/models";
 
 // Chip de loja da barra lateral. O clique não conhece o Core: apenas anuncia a
@@ -74,17 +75,17 @@ export class PlaynuxStoreChipElement extends HTMLElement {
     }
     this.button.hidden = false;
     this.name.textContent = store.name;
-    this.action.textContent = this.busyValue ? "…" : store.connected ? "Sincronizar" : "Conectar";
+    this.action.textContent = this.busyValue ? "…" : store.connected ? t("Sync") : t("Connect");
     this.button.disabled = this.busyValue;
     this.button.classList.toggle("is-connected", store.connected);
     this.button.setAttribute("aria-busy", String(this.busyValue));
     this.button.setAttribute(
       "aria-label",
-      `${store.connected ? "Sincronizar" : "Conectar"} ${store.name}`,
+      `${store.connected ? t("Sync") : t("Connect")} ${store.name}`,
     );
     this.button.title = store.connected
-      ? `${store.name} conectada — sincronizar biblioteca`
-      : `Entrar na ${store.name}`;
+      ? t("{0} connected. Sync library", store.name)
+      : t("Sign in to {0}", store.name);
   }
 }
 

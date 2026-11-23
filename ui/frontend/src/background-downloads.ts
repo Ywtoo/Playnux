@@ -1,3 +1,4 @@
+import { t } from "./i18n";
 export function createBackgroundDownloads(errorMessage: (error: unknown) => string) {
   const panel = document.querySelector<HTMLElement>("#background-downloads")!;
   const bar = panel.querySelector<HTMLProgressElement>("progress")!;
@@ -18,9 +19,9 @@ export function createBackgroundDownloads(errorMessage: (error: unknown) => stri
     bar.value = finished;
     bar.hidden = !running;
     dismiss.hidden = running;
-    const text = running ? `${active || "Downloads"} · ${finished} de ${total}`
-      : failures ? `Downloads concluídos · ${failures} falha${failures === 1 ? "" : "s"}`
-      : "Downloads concluídos";
+    const text = running ? t("{0} · {1} of {2}", active || "Downloads", finished, total)
+      : failures ? t("Downloads complete · {0} failed{1}", failures, failures === 1 ? "" : "s")
+      : t("Downloads complete");
     status.textContent = text;
     panel.title = latestError ? `${text}. ${latestError}` : text;
     panel.classList.toggle("has-errors", failures > 0);

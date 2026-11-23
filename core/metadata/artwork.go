@@ -21,12 +21,13 @@ import (
 	"time"
 
 	"github.com/playnux/core/models"
+	_ "golang.org/x/image/webp"
 )
 
 const maxArtworkBytes = 3 << 20
 const artworkPrefix = "/artwork/"
 
-var artworkFilename = regexp.MustCompile(`^(manual|provider)-[a-f0-9]{64}\.(png|jpeg|gif)$`)
+var artworkFilename = regexp.MustCompile(`^(manual|provider)-[a-f0-9]{64}\.(png|jpeg|gif|webp)$`)
 
 // ArtworkStore é a parte do banco usada pelo gerenciador de imagens.
 type ArtworkStore interface {
@@ -47,7 +48,7 @@ type ArtworkManager struct {
 func (m *ArtworkManager) StoreArtwork(data []byte, origin string) (string, error) {
 	config, format, err := image.DecodeConfig(bytes.NewReader(data))
 	if err != nil || config.Width > 8192 || config.Height > 8192 || config.Width <= 0 || config.Height <= 0 {
-		return "", fmt.Errorf("use uma imagem PNG, JPG ou GIF de até 8192 pixels por lado")
+		return "", fmt.Errorf("use uma imagem PNG, JPG, GIF ou WebP de até 8192 pixels por lado")
 	}
 	if m.Dir == "" {
 		return "data:image/" + format + ";base64," + base64.StdEncoding.EncodeToString(data), nil
@@ -82,6 +83,10 @@ func (m *ArtworkManager) StoreArtwork(data []byte, origin string) (string, error
 // ServeArtwork exposes validated image filenames from Playnux's private cache.
 func (m *ArtworkManager) ServeArtwork(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if role, ok := strings.CutPrefix(r.URL.Path, thumbPrefix); ok {
+			m.serveThumbnail(w, r, role)
+			return
+		}
 		name, ok := strings.CutPrefix(r.URL.Path, artworkPrefix)
 		if !ok {
 			next.ServeHTTP(w, r)

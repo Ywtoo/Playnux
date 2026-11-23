@@ -2,6 +2,7 @@ package epic
 
 import (
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -57,13 +58,11 @@ func (e *EpicProvider) ID() string { return "epic" }
 
 func (e *EpicProvider) Name() string { return "Epic Games Store" }
 
-// WebLogin descreve a janela oficial de login da Epic para a ponte WebView.
 func (e *EpicProvider) WebLogin() store.WebLoginSpec {
 	redirect := "https://www.epicgames.com/id/api/redirect?clientId=" +
 		epicClientID + "&responseType=code"
 	return store.WebLoginSpec{
 		URL:               "https://www.epicgames.com/id/login?redirectUrl=" + url.QueryEscape(redirect),
-		CookieNames:       []string{"EPIC_BEARER_TOKEN", "exchange_code", "access_token"},
 		RedirectURLPrefix: "https://www.epicgames.com/id/api/redirect",
 	}
 }
@@ -73,6 +72,7 @@ func (e *EpicProvider) Authenticate(ctx context.Context, auth store.StoreAuth) e
 		return fmt.Errorf("epic: access token ou refresh token obrigatório")
 	}
 
+	auth.Cookies = ""
 	e.auth = auth
 	if e.auth.AccessToken == "" || tokenExpired(e.auth.ExpiresAt) {
 		if e.auth.RefreshToken == "" {
@@ -90,7 +90,7 @@ func (e *EpicProvider) IsAuthenticated() bool {
 // AuthSnapshot devolve os tokens atuais (podem ter sido renovados).
 func (e *EpicProvider) AuthSnapshot() store.StoreAuth { return e.auth }
 
-// ExchangeCode troca o authorization code capturado na WebView pelos tokens.
+// ExchangeCode troca o authorization code emitido pela Epic pelos tokens.
 func (e *EpicProvider) ExchangeCode(ctx context.Context, code string) (store.StoreAuth, error) {
 	return e.requestToken(ctx, url.Values{
 		"grant_type": {"authorization_code"},
@@ -115,7 +115,6 @@ func (e *EpicProvider) refresh(ctx context.Context) error {
 	if auth.AccountID == "" {
 		auth.AccountID = e.auth.AccountID
 	}
-	auth.Cookies = e.auth.Cookies
 	e.auth = auth
 	return nil
 }
@@ -191,7 +190,9 @@ func (e *EpicProvider) FetchLibrary(ctx context.Context) ([]*models.Game, error)
 	games := make(map[string]*models.Game)
 	for _, entry := range heroic.EpicLibrary() {
 		game := gameFromLocal(entry)
-		games[game.GameID] = game
+		if !IsLibraryExtra(game) {
+			games[game.GameID] = game
+		}
 	}
 
 	if e.IsAuthenticated() {
@@ -219,7 +220,9 @@ func (e *EpicProvider) FetchInstalled(context.Context) ([]*models.Game, error) {
 	entries := heroic.EpicLibrary()
 	games := make([]*models.Game, 0, len(entries))
 	for _, entry := range entries {
-		games = append(games, gameFromLocal(entry))
+		if game := gameFromLocal(entry); game.IsInstalled && !IsLibraryExtra(game) {
+			games = append(games, game)
+		}
 	}
 	return games, nil
 }
@@ -242,18 +245,74 @@ type epicRecordList struct {
 }
 
 type epicRecord struct {
-	ProductID     string `json:"productId"`
-	AppName       string `json:"appName"`
-	CatalogItemID string `json:"catalogItemId"`
-	Namespace     string `json:"namespace"`
-	ProductName   string `json:"productName"`
-	Metadata      *struct {
-		Title           string         `json:"title"`
-		Description     string         `json:"description"`
-		LongDescription string         `json:"longDescription"`
-		Developer       string         `json:"developer"`
-		KeyImages       []heroic.Image `json:"keyImages"`
-	} `json:"metadata"`
+	epicCatalog
+	AppName       string       `json:"appName"`
+	CatalogItemID string       `json:"catalogItemId"`
+	ProductName   string       `json:"productName"`
+	Namespace     string       `json:"namespace"`
+	SandboxType   string       `json:"sandboxType"`
+	Metadata      *epicCatalog `json:"metadata"`
+	CatalogItem   *epicCatalog `json:"catalogItem"`
+}
+
+type epicCatalog struct {
+	Title           string                  `json:"title"`
+	Description     string                  `json:"description"`
+	LongDescription string                  `json:"longDescription"`
+	Developer       string                  `json:"developer"`
+	KeyImages       []heroic.Image          `json:"keyImages"`
+	ItemType        string                  `json:"itemType"`
+	MainGameItem    *struct{ ID string }    `json:"mainGameItem"`
+	Categories      []struct{ Path string } `json:"categories"`
+}
+
+func (item *epicCatalog) isExtra() bool {
+	switch strings.ToUpper(item.ItemType) {
+	case "SUBSCRIPTION", "CONSUMABLE", "CURRENCY", "DLC":
+		return true
+	}
+	if item.MainGameItem != nil && item.MainGameItem.ID != "" {
+		return true
+	}
+	for _, category := range item.Categories {
+		switch strings.ToLower(category.Path) {
+		case "addons", "games/addons", "dlc", "points", "virtualcurrency", "assets", "plugins", "engine", "mods", "soundtracks":
+			return true
+		}
+	}
+	return false
+}
+
+func opaqueTitle(value string) bool {
+	value = strings.ReplaceAll(strings.TrimSpace(value), "-", "")
+	if len(value) != 32 {
+		return false
+	}
+	_, err := hex.DecodeString(value)
+	return err == nil
+}
+
+// IsLibraryExtra also recognizes service names already imported by older builds.
+func IsLibraryExtra(game *models.Game) bool {
+	return game.PluginID == "epic" && !game.IsCustomGame && isServiceEntry(game.Name, game.GameID)
+}
+
+func isServiceEntry(name, id string) bool {
+	title := strings.ToLower(strings.TrimSpace(name))
+	switch title {
+	case "live", "ue marketplace", "unreal engine", "twinmotion", "fab-listing-live":
+		return true
+	}
+	return strings.HasPrefix(strings.ToLower(strings.TrimSpace(id)), "metahumansample_") ||
+		strings.HasSuffix(title, " production")
+}
+
+// IsUnresolvedImport hides legacy cloud placeholders while a new sync obtains
+// their storefront names. The existing rows remain available to update in place.
+func IsUnresolvedImport(game *models.Game) bool {
+	return game.PluginID == "epic" && !game.IsInstalled &&
+		(game.Name == "" || (game.Name == game.GameID && game.Description == "" &&
+			game.CoverImage == "" && game.BackgroundImage == ""))
 }
 
 func (e *EpicProvider) fetchDigitalLibrary(ctx context.Context) ([]*models.Game, error) {
@@ -309,30 +368,43 @@ func (e *EpicProvider) fetchDigitalLibrary(ctx context.Context) ([]*models.Game,
 }
 
 func gameFromRecord(record epicRecord) *models.Game {
-	gameID := record.AppName
-	if gameID == "" {
-		gameID = record.CatalogItemID
-	}
-	if gameID == "" {
+	gameID := strings.TrimSpace(record.AppName)
+	if gameID == "" || gameID == "1" || strings.EqualFold(record.Namespace, "ue") ||
+		strings.EqualFold(record.Namespace, "fab") || strings.EqualFold(record.SandboxType, "private") {
 		return nil
 	}
 
-	name := record.ProductName
-	var description, developer string
+	var name, description, developer string
 	var images []heroic.Image
-	if record.Metadata != nil {
-		if record.Metadata.Title != "" {
-			name = record.Metadata.Title
+	for _, catalog := range []*epicCatalog{record.CatalogItem, record.Metadata, &record.epicCatalog} {
+		if catalog == nil {
+			continue
 		}
-		description = record.Metadata.Description
+		if catalog.isExtra() {
+			return nil
+		}
+		title := strings.TrimSpace(catalog.Title)
+		if name == "" && !opaqueTitle(title) && !isServiceEntry(title, gameID) {
+			name = title
+		}
 		if description == "" {
-			description = record.Metadata.LongDescription
+			description = catalog.Description
+			if description == "" {
+				description = catalog.LongDescription
+			}
 		}
-		developer = record.Metadata.Developer
-		images = record.Metadata.KeyImages
+		if developer == "" {
+			developer = catalog.Developer
+		}
+		if len(images) == 0 {
+			images = catalog.KeyImages
+		}
 	}
 	if name == "" {
-		name = gameID
+		name = strings.TrimSpace(record.ProductName)
+	}
+	if name == "" || opaqueTitle(name) || isServiceEntry(name, gameID) {
+		return nil
 	}
 
 	game := &models.Game{
@@ -381,6 +453,10 @@ func mergeInstallState(dst, local *models.Game) {
 	dst.IsInstalled = local.IsInstalled
 	dst.InstallDirectory = local.InstallDirectory
 	dst.InstallSize = local.InstallSize
+	if dst.Name == "" {
+		dst.Name = local.Name
+		dst.SortingName = local.SortingName
+	}
 	if dst.CoverImage == "" {
 		dst.CoverImage = local.CoverImage
 	}

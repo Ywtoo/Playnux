@@ -1,3 +1,4 @@
+import { language, t } from "./i18n";
 import type { Game } from "../bindings/github.com/playnux/core/models/models.js";
 import { formatPlaytime, formatSize, lastPlayedLabel, plainText, releaseYear, sourceLabel } from "./format";
 
@@ -5,7 +6,7 @@ function releaseLabel(game: Game): string {
   if (game.release_date) {
     const date = new Date(game.release_date);
     if (!Number.isNaN(date.getTime())) {
-      return new Intl.DateTimeFormat("pt-BR", { dateStyle: "long", timeZone: "UTC" }).format(date);
+      return new Intl.DateTimeFormat(language, { dateStyle: "long", timeZone: "UTC" }).format(date);
     }
   }
   return releaseYear(game);
@@ -20,7 +21,7 @@ function score(value: number | null | undefined): string {
 }
 
 export function renderGameInformation(game: Game, description: HTMLElement, sheet: HTMLElement, tags: HTMLElement): void {
-  description.textContent = plainText(game.description) || "Sinopse indisponível.";
+  description.textContent = plainText(game.description) || t("No description available.");
   const tagNames = [...new Set(game.tags?.map((value) => value.trim()).filter(Boolean))];
   tags.hidden = !tagNames.length;
   tags.replaceChildren();
@@ -36,28 +37,28 @@ export function renderGameInformation(game: Game, description: HTMLElement, shee
     tags.append(heading, list);
   }
   const groups: { title: string; entries: [string, string][] }[] = [
-    { title: "Ficha técnica", entries: [
-      ["Lançamento", releaseLabel(game)],
-      ["Desenvolvedoras", names(game.developers)],
-      ["Distribuidoras", names(game.publishers)],
-      ["Gêneros", names(game.genres)],
-      ["Plataformas", names(game.platforms)],
-      ["Recursos", names(game.features)],
-      ["Categorias", names(game.categories)],
-      ["Versão", game.version],
+    { title: t("Game information"), entries: [
+      [t("Release"), releaseLabel(game)],
+      [t("Developers"), names(game.developers)],
+      [t("Publishers"), names(game.publishers)],
+      [t("Genres"), names(game.genres)],
+      [t("Platforms"), names(game.platforms)],
+      [t("Features"), names(game.features)],
+      [t("Categories"), names(game.categories)],
+      [t("Version"), game.version],
     ] },
-    { title: "Avaliações", entries: [
-      ["Crítica", score(game.critic_score)],
-      ["Comunidade", score(game.community_score)],
-      ["Sua nota", score(game.user_score)],
+    { title: t("Ratings"), entries: [
+      [t("Critics"), score(game.critic_score)],
+      [t("Community"), score(game.community_score)],
+      [t("Your score"), score(game.user_score)],
     ] },
-    { title: "Na sua biblioteca", entries: [
-      ["Origem", sourceLabel(game)],
-      ["Instalação", game.is_installed ? "Instalado" : "Não instalado"],
-      ["Tamanho", formatSize(game.install_size)],
-      ["Tempo de jogo", formatPlaytime(game.playtime)],
-      ["Última sessão", lastPlayedLabel(game.last_activity)],
-      ["Vezes iniciado", game.play_count > 0 ? String(game.play_count) : ""],
+    { title: t("In your library"), entries: [
+      [t("Source"), sourceLabel(game)],
+      [t("Installation"), game.is_installed ? t("Installed") : t("Not installed")],
+      [t("Size"), formatSize(game.install_size)],
+      [t("Playtime"), formatPlaytime(game.playtime)],
+      [t("Last played"), lastPlayedLabel(game.last_activity)],
+      [t("Times launched"), game.play_count > 0 ? String(game.play_count) : ""],
     ] },
   ];
 

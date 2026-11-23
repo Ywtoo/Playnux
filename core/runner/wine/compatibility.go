@@ -7,12 +7,15 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/playnux/core/models"
 	"github.com/playnux/core/runner/launcher"
 	"github.com/playnux/core/store/builtins/heroic"
+	"github.com/playnux/core/store/builtins/steam"
 )
 
 // Runner é uma versão de Proton/Wine encontrada no sistema.
@@ -20,29 +23,12 @@ type Runner struct {
 	Name        string `json:"name"`
 	Path        string `json:"path"`
 	Kind        string `json:"kind"`
+	Version     string `json:"version,omitempty"`
 	Recommended bool   `json:"recommended"`
 }
 
 // DiscoverRunners lista Proton (Steam/GE) e o Wine do sistema.
 func DiscoverRunners() []Runner {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return nil
-	}
-
-	var roots []string
-	for _, root := range []string{
-		filepath.Join(home, ".local/share/Steam"),
-		filepath.Join(home, ".steam/steam"),
-		filepath.Join(home, ".steam/root"),
-		filepath.Join(home, ".var/app/com.valvesoftware.Steam/.local/share/Steam"),
-		filepath.Join(home, ".var/app/com.valvesoftware.Steam/data/Steam"),
-	} {
-		if info, statErr := os.Stat(root); statErr == nil && info.IsDir() {
-			roots = append(roots, root)
-		}
-	}
-
 	seen := make(map[string]bool)
 	runners := make([]Runner, 0, 8)
 	addProton := func(path string) {
@@ -54,30 +40,38 @@ func DiscoverRunners() []Runner {
 			return
 		}
 		info, statErr := os.Stat(path)
-		if statErr != nil || info.IsDir() {
+		if statErr != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0111 == 0 {
 			return
 		}
 		seen[path] = true
 		runners = append(runners, Runner{
-			Name: filepath.Base(filepath.Dir(path)),
-			Path: path,
-			Kind: "proton",
+			Name:    filepath.Base(filepath.Dir(path)),
+			Path:    path,
+			Kind:    "proton",
+			Version: protonBuild(path),
 		})
 	}
 
-	for _, root := range roots {
-		for _, base := range []string{
-			filepath.Join(root, "compatibilitytools.d"),
-			filepath.Join(root, "steamapps", "common"),
-		} {
-			entries, readErr := os.ReadDir(base)
-			if readErr != nil {
-				continue
-			}
-			for _, entry := range entries {
-				if !entry.IsDir() || !strings.Contains(strings.ToLower(entry.Name()), "proton") {
-					continue
-				}
+	var bases []string
+	for _, root := range steam.Roots() {
+		bases = append(bases, filepath.Join(root, "compatibilitytools.d"))
+	}
+	for _, library := range steam.LibraryDirectories() {
+		bases = append(bases, filepath.Join(library, "common"))
+	}
+	if config, err := os.UserConfigDir(); err == nil {
+		bases = append(bases, filepath.Join(config, "heroic/tools/proton"))
+	}
+	if home, err := os.UserHomeDir(); err == nil {
+		bases = append(bases, filepath.Join(home, ".var/app/com.heroicgameslauncher.hgl/config/heroic/tools/proton"))
+	}
+	for _, base := range bases {
+		entries, err := os.ReadDir(base)
+		if err != nil {
+			continue
+		}
+		for _, entry := range entries {
+			if strings.Contains(strings.ToLower(entry.Name()), "proton") {
 				addProton(filepath.Join(base, entry.Name(), "proton"))
 			}
 		}
@@ -96,17 +90,41 @@ func DiscoverRunners() []Runner {
 		if left.Kind != right.Kind {
 			return left.Kind == "proton"
 		}
-		leftGE := strings.HasPrefix(strings.ToLower(left.Name), "ge-proton")
-		rightGE := strings.HasPrefix(strings.ToLower(right.Name), "ge-proton")
-		if leftGE != rightGE {
-			return leftGE
+		leftVersion, rightVersion := stableVersion(left.Name), stableVersion(right.Name)
+		if leftVersion != rightVersion {
+			return leftVersion > rightVersion
 		}
 		return strings.ToLower(left.Name) > strings.ToLower(right.Name)
 	})
-	if len(runners) > 0 && runners[0].Kind == "proton" {
-		runners[0].Recommended = true
-	}
 	return runners
+}
+
+func protonBuild(executable string) string {
+	path := filepath.Join(filepath.Dir(executable), "version")
+	if info, err := os.Stat(path); err != nil || !info.Mode().IsRegular() || info.Size() > 4096 {
+		return ""
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	fields := strings.Fields(string(data))
+	if len(fields) < 2 {
+		return ""
+	}
+	return strings.TrimSuffix(strings.TrimSuffix(fields[1], "-x86_64"), "-arm64")
+}
+
+var stableProton = regexp.MustCompile(`(?i)^Proton (\d+)\.(\d+)$`)
+
+func stableVersion(name string) int {
+	match := stableProton.FindStringSubmatch(name)
+	if match == nil {
+		return 0
+	}
+	major, _ := strconv.Atoi(match[1])
+	minor, _ := strconv.Atoi(match[2])
+	return 1 + major*100 + minor
 }
 
 // ManualWindowsExecutable returns the .exe added manually, when present.
@@ -142,13 +160,16 @@ func WindowsExecutable(game *models.Game) string {
 	}
 	if game.PluginID == "gog" || game.PluginID == "epic" {
 		if install := heroic.InstallFor(game.GameID); install != nil {
+			if strings.EqualFold(install.Platform, "linux") {
+				return ""
+			}
 			if info, err := os.Stat(install.Path); err == nil && info.IsDir() {
 				if exe := install.ExecutablePath(); exe != "" && strings.EqualFold(filepath.Ext(exe), ".exe") {
 					if info, err := os.Stat(exe); err == nil && !info.IsDir() {
 						return exe
 					}
 				}
-				if exe := findExecutable(install.Path); exe != "" {
+				if exe := findExecutable(install.Path, game.Name); exe != "" {
 					return exe
 				}
 			}
@@ -156,7 +177,7 @@ func WindowsExecutable(game *models.Game) string {
 	}
 	if game.InstallDirectory != "" {
 		if info, err := os.Stat(game.InstallDirectory); err == nil && info.IsDir() {
-			return findExecutable(game.InstallDirectory)
+			return findExecutable(game.InstallDirectory, game.Name)
 		}
 	}
 	return ""
@@ -167,8 +188,9 @@ var ignoredExecutableWords = []string{
 	"crash", "report", "launcher_installer", "eula", "activation",
 }
 
-func findExecutable(root string) string {
-	var best string
+func findExecutable(root, name string) string {
+	candidates := make(map[string]string)
+	title := executableKey(name)
 	_ = filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return nil
@@ -192,12 +214,41 @@ func findExecutable(root string) string {
 				return nil
 			}
 		}
-		if best == "" || len(path) < len(best) {
-			best = path
+		key := executableKey(strings.TrimSuffix(lower, ".exe"))
+		current := candidates[key]
+		if current == "" || (is64BitPath(path) && !is64BitPath(current)) {
+			candidates[key] = path
 		}
 		return nil
 	})
-	return best
+	if candidate := candidates[title]; candidate != "" {
+		return candidate
+	}
+	if len(candidates) == 1 {
+		for _, candidate := range candidates {
+			return candidate
+		}
+	}
+	return ""
+}
+
+func executableKey(name string) string {
+	return strings.Map(func(r rune) rune {
+		if r >= 'a' && r <= 'z' || r >= '0' && r <= '9' {
+			return r
+		}
+		return -1
+	}, strings.ToLower(name))
+}
+
+func is64BitPath(path string) bool {
+	for _, segment := range strings.Split(filepath.ToSlash(filepath.Dir(path)), "/") {
+		switch strings.ToLower(segment) {
+		case "x64", "win64", "64bit", "x86_64":
+			return true
+		}
+	}
+	return false
 }
 
 // Apply builds an isolated Proton/Wine invocation. Native store launchers stay
@@ -207,13 +258,16 @@ func Apply(options *launcher.Options, game *models.Game, dataDir string) error {
 	if game == nil || game.PluginID == "emulation" {
 		return nil
 	}
-	exe := WindowsExecutable(game)
 	runner := strings.TrimSpace(options.Runner)
 	protonPath := strings.TrimSpace(options.ProtonPath)
 	if runner == "" {
 		runner = "auto"
 	}
 
+	if runner == "auto" && game.PluginID != "linux" {
+		return nil
+	}
+	exe := WindowsExecutable(game)
 	if runner == "wine" {
 		if exe == "" {
 			return fmt.Errorf("não foi possível localizar o executável Windows deste jogo")
@@ -222,10 +276,8 @@ func Apply(options *launcher.Options, game *models.Game, dataDir string) error {
 		if err != nil {
 			return fmt.Errorf("o Wine do sistema não foi encontrado")
 		}
-		if game.PluginID != "linux" {
-			options.Command = wine
-			options.CommandArgs = []string{exe}
-		}
+		options.Command = wine
+		options.CommandArgs = []string{exe}
 		if options.Directory == "" {
 			options.Directory = filepath.Dir(exe)
 		}
@@ -245,6 +297,7 @@ func Apply(options *launcher.Options, game *models.Game, dataDir string) error {
 		if protonPath == "" {
 			return nil
 		}
+		runner = "proton"
 	}
 	if runner != "proton" {
 		return fmt.Errorf("runner de compatibilidade desconhecido")
@@ -279,24 +332,17 @@ func prefixID(value string) string {
 }
 
 func steamInstallRoot(protonPath string) string {
-	for dir := filepath.Dir(protonPath); dir != "." && dir != string(filepath.Separator); dir = filepath.Dir(dir) {
-		if filepath.Base(dir) == "steamapps" {
-			return filepath.Dir(dir)
+	roots := steam.Roots()
+	for _, root := range roots {
+		if strings.HasPrefix(protonPath, root+string(filepath.Separator)) {
+			return root
 		}
 	}
-	if home, err := os.UserHomeDir(); err == nil {
-		for _, candidate := range []string{
-			filepath.Join(home, ".steam/root"),
-			filepath.Join(home, ".local/share/Steam"),
-			filepath.Join(home, ".steam/steam"),
-		} {
-			if info, err := os.Stat(candidate); err == nil && info.IsDir() {
-				return candidate
-			}
-		}
-		return filepath.Join(home, ".steam/root")
+	if len(roots) > 0 {
+		return roots[0]
 	}
-	return ""
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, ".steam/root")
 }
 
 // RunnerName devolve o nome legível de uma versão de Proton/Wine pelo caminho.

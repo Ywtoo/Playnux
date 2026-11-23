@@ -2,10 +2,12 @@ package app
 
 import (
 	"context"
+	"os"
 
 	"github.com/playnux/core/models"
 	"github.com/playnux/core/runner/launcher"
 	"github.com/playnux/core/runner/wine"
+	"github.com/playnux/core/store/builtins/steam"
 )
 
 // CompatibilityRunners lista Proton (Steam/GE) e o Wine do sistema. A UI usa
@@ -30,32 +32,45 @@ func (c *App) WindowsExecutable(ctx context.Context, id string) (string, error) 
 	return wine.WindowsExecutable(game), nil
 }
 
-func (c *App) configuredRunner(ctx context.Context, game *models.Game) string {
+func (c *App) configuredRunner(ctx context.Context, game *models.Game, automatic string) string {
 	options, err := c.LaunchOptions(ctx, game)
 	if err != nil {
-		return ""
+		return automatic
 	}
-	exe := wine.WindowsExecutable(game)
 	switch options.Runner {
 	case "proton":
 		if name := wine.RunnerName(options.ProtonPath); name != "" {
-			return name
-		}
-		return "Proton (indisponível)"
-	case "wine":
-		if exe != "" {
-			return "Wine"
-		}
-	case "auto":
-		if game.PluginID == "linux" && exe != "" {
-			for _, candidate := range wine.DiscoverRunners() {
-				if candidate.Kind == "proton" {
-					return candidate.Name + " (automático)"
-				}
+			if info, err := os.Stat(options.ProtonPath); err == nil && info.Mode().IsRegular() && info.Mode().Perm()&0111 != 0 {
+				return name
 			}
-			return "Wine (automático)"
+			return name + " (indisponível)"
 		}
+		return "Proton indisponível"
+	case "wine":
+		return "Wine do sistema"
+	}
+	return automatic
+}
+
+func automaticRunner(game *models.Game) string {
+	if game.PluginID == "linux" && wine.ManualWindowsExecutable(game) != "" {
+		for _, candidate := range wine.DiscoverRunners() {
+			if candidate.Kind == "proton" {
+				return candidate.Name
+			}
+		}
+		return "Wine do sistema"
 	}
 	return configuredRuntime(game)
 }
 
+func (c *App) TrailerSources(ctx context.Context, id string, highQuality bool) ([]string, error) {
+	game, err := c.GetGame(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if provider, ok := c.providers[game.PluginID].(*steam.SteamProvider); ok {
+		return provider.TrailerSources(ctx, game.GameID, highQuality), nil
+	}
+	return nil, nil
+}

@@ -70,3 +70,39 @@ func TestApplyKeepsNativeLauncherByDefault(t *testing.T) {
 		t.Fatalf("store game should use its native launcher, got %q", options.Command)
 	}
 }
+
+func TestAutomaticWindowsGameUsesProtonInSecondarySteamLibrary(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, "config"))
+	primary := filepath.Join(home, ".local/share/Steam", "steamapps")
+	library := filepath.Join(home, "other disk")
+	proton := filepath.Join(library, "steamapps", "common", "Proton 10.0", "proton")
+	exe := filepath.Join(home, "Game.exe")
+	for _, dir := range []string{primary, filepath.Dir(proton)} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(primary, "libraryfolders.vdf"), []byte(`"libraryfolders" { "1" {
+        "path" "`+library+`"
+    } }`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{exe, proton} {
+		if err := os.WriteFile(path, []byte("fixture"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	game := &models.Game{ID: "local-game", GameID: "manual:" + exe, PluginID: "linux"}
+	var options launcher.Options
+	if err := Apply(&options, game, home); err != nil {
+		t.Fatal(err)
+	}
+	if options.Command != proton || len(options.CommandArgs) != 2 || options.CommandArgs[1] != exe {
+		t.Fatalf("comando automático = %+v", options)
+	}
+	if options.Environment["STEAM_COMPAT_CLIENT_INSTALL_PATH"] != filepath.Dir(primary) {
+		t.Fatalf("Steam client = %q", options.Environment["STEAM_COMPAT_CLIENT_INSTALL_PATH"])
+	}
+}

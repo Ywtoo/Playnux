@@ -1,13 +1,11 @@
 [Desktop Entry]
 Version=1.0
-Name=My Product
-Comment=A playnux application
-# The Exec line includes %u to pass the URL to the application
-Exec=/usr/local/bin/playnux %u
+Name=Playnux
+Comment=Unified game library for Linux
+Comment[pt_BR]=Biblioteca unificada de jogos para Linux
+Exec=playnux
 Terminal=false
 Type=Application
 Icon=playnux
-Categories=Utility;
+Categories=Game;
 StartupWMClass=playnux
-
- 

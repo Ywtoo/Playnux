@@ -50,6 +50,7 @@ type StoreInfo struct {
 	Connected   bool                `json:"connected"`
 	Clients     []ApplicationStatus `json:"clients"`
 	APIKeySaved bool                `json:"api_key_saved"`
+	AccountID   string              `json:"account_id,omitempty"`
 }
 
 type ApplicationStatus struct {
@@ -220,7 +221,7 @@ func (c *App) ListGames(ctx context.Context, filter string) ([]*models.Game, err
 	if err != nil {
 		return nil, err
 	}
-	games = slices.DeleteFunc(games, linux.IsImportedLibraryTool)
+	games = c.filterLibraryImports(ctx, games)
 	return c.applyLibraryView(games), nil
 }
 
@@ -233,8 +234,28 @@ func (c *App) SearchGames(ctx context.Context, query string) ([]*models.Game, er
 	if err != nil {
 		return nil, err
 	}
-	games = slices.DeleteFunc(games, linux.IsImportedLibraryTool)
+	games = c.filterLibraryImports(ctx, games)
 	return c.applyLibraryView(games), nil
+}
+
+func (c *App) filterLibraryImports(ctx context.Context, games []*models.Game) []*models.Game {
+	var playable map[string]bool
+	if raw, err := c.db.GetSetting(ctx, settingEpicPlayable); err == nil {
+		_ = json.Unmarshal([]byte(raw), &playable)
+	}
+	return slices.DeleteFunc(games, func(game *models.Game) bool {
+		return linux.IsImportedLibraryTool(game) || epic.IsLibraryExtra(game) ||
+			gog.IsLibraryExtra(game) || c.unresolvedEpicImport(ctx, game) ||
+			(playable != nil && game.PluginID == "epic" && !game.IsInstalled && !game.IsCustomGame && !playable[game.GameID])
+	})
+}
+
+func (c *App) unresolvedEpicImport(ctx context.Context, game *models.Game) bool {
+	if !epic.IsUnresolvedImport(game) {
+		return false
+	}
+	metadata, err := c.db.StoreMetadata(ctx, game.PluginID, game.GameID)
+	return err == nil && (metadata == nil || metadata.Name == "")
 }
 
 func (c *App) GetGame(ctx context.Context, id string) (*models.Game, error) {
@@ -248,13 +269,33 @@ func (c *App) GetGame(ctx context.Context, id string) (*models.Game, error) {
 	return c.withVariants(ctx, game), nil
 }
 
+const settingEpicPlayable = "epic.playable_library"
+
+// A full Epic sync replaces the cloud listing. Retained rows preserve local
+// edits, artwork and favorites but absent entitlements no longer show as games.
+func (c *App) rememberEpicLibrary(ctx context.Context, storeID string, games []*models.Game, syncErr error) ([]*models.Game, error) {
+	if syncErr != nil || storeID != "epic" {
+		return games, syncErr
+	}
+	playable := make(map[string]bool, len(games))
+	for _, game := range games {
+		playable[game.GameID] = true
+	}
+	raw, err := json.Marshal(playable)
+	if err != nil {
+		return games, err
+	}
+	return games, c.db.SetSetting(ctx, settingEpicPlayable, string(raw))
+}
+
 func (c *App) SyncStore(ctx context.Context, storeID string) ([]*models.Game, error) {
-	return c.manager.Sync(ctx, storeID)
+	games, err := c.manager.Sync(ctx, storeID)
+	return c.rememberEpicLibrary(ctx, storeID, games, err)
 }
 
 func (c *App) Login(ctx context.Context, storeID string) ([]*models.Game, error) {
 	_, games, err := c.manager.Login(ctx, storeID)
-	return games, err
+	return c.rememberEpicLibrary(ctx, storeID, games, err)
 }
 
 func (c *App) LaunchGame(ctx context.Context, game *models.Game) error {
@@ -635,6 +676,9 @@ func (c *App) Stores(ctx context.Context) []StoreInfo {
 		} else if session, err := c.db.LoadSession(ctx, id); err == nil {
 			info.Connected = true
 			info.APIKeySaved = session.APIKey != ""
+			if id == "steam" {
+				info.AccountID = session.AccountID
+			}
 		}
 		if managed, ok := provider.(store.ApplicationProvider); ok {
 			for _, required := range managed.ApplicationRequirements() {

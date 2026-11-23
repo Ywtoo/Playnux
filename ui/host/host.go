@@ -45,6 +45,11 @@ type Host struct {
 	window *application.WebviewWindow
 	ctx    context.Context
 
+	trailerServer *http.Server
+	updateBinary  string
+	restartBinary string
+	trailerURL    string
+
 	sleeping atomic.Bool
 }
 
@@ -79,6 +84,11 @@ func (h *Host) ServiceStartup(ctx context.Context, _ application.ServiceOptions)
 }
 
 func (h *Host) ServiceShutdown() error {
+	h.mu.Lock()
+	if h.trailerServer != nil {
+		_ = h.trailerServer.Close()
+	}
+	h.mu.Unlock()
 	if h.core == nil {
 		return nil
 	}
@@ -204,6 +214,26 @@ func (h *Host) PickGameExecutable() (string, error) {
 	return dialog.PromptForSingleSelection()
 }
 
+// PickDirectory opens the native system folder chooser.
+func (h *Host) PickDirectory() (string, error) {
+	h.mu.RLock()
+	app, window := h.app, h.window
+	h.mu.RUnlock()
+	if app == nil {
+		return "", fmt.Errorf("janela Wails ainda não inicializada")
+	}
+
+	dialog := app.Dialog.OpenFile().
+		SetTitle("Selecionar pasta").
+		SetButtonText("_Selecionar").
+		CanChooseFiles(false).
+		CanChooseDirectories(true)
+	if window != nil {
+		dialog.AttachToWindow(window)
+	}
+	return dialog.PromptForSingleSelection()
+}
+
 // ── Pastas locais ────────────────────────────────────────────────────────────
 
 func (h *Host) GetLocalFolders() []string {
@@ -283,10 +313,15 @@ func (h *Host) OpenLogin(ctx context.Context, req auth.LoginRequest) (auth.Login
 		return auth.LoginResult{}, fmt.Errorf("URL de login vazia")
 	}
 	h.mu.RLock()
-	app := h.app
+	app, parent := h.app, h.window
 	h.mu.RUnlock()
 	if app == nil {
 		return auth.LoginResult{}, fmt.Errorf("janela Wails ainda não inicializada")
+	}
+	if (req.PluginID == "epic" || req.PluginID == "gog") && parent != nil {
+		if result, err, supported := embeddedStoreLogin(ctx, parent, req); supported {
+			return result, err
+		}
 	}
 
 	token, err := randomToken()
@@ -401,6 +436,15 @@ func randomToken() (string, error) {
 }
 
 // ── Deep Sleep ───────────────────────────────────────────────────────────────
+
+func (h *Host) LaunchFailed(game *models.Game, message string) {
+	h.mu.RLock()
+	app := h.app
+	h.mu.RUnlock()
+	if app != nil {
+		app.Event.Emit("gameplay:launch-error", map[string]string{"game": game.Name, "message": message})
+	}
+}
 
 // Sleep congela a UI, libera as capas da memória e devolve o heap ao sistema.
 // A janela só é escondida depois que o script visual teve chance de rodar.
@@ -523,6 +567,10 @@ func (h *Host) SearchProviderArtwork(query, field string) ([]metadata.WebImage, 
 
 func (h *Host) ApplySteamGridImage(gameID, field string, image metadata.WebImage) error {
 	return h.core.ApplySteamGridImage(h.appContext(), gameID, field, image)
+}
+
+func (h *Host) GetTrailerSources(gameID string, highQuality bool) ([]string, error) {
+	return h.core.TrailerSources(h.appContext(), gameID, highQuality)
 }
 
 func (h *Host) GetGameRuntime(gameID string) (app.GameRuntime, error) {

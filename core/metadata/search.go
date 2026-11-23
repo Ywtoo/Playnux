@@ -78,7 +78,7 @@ func GoogleImageSearchURL(query string, transparent bool) (string, error) {
 	if query == "" || len(query) > 400 {
 		return "", fmt.Errorf("informe uma busca de até 400 bytes")
 	}
-	params := url.Values{"tbm": {"isch"}, "q": {query}, "safe": {"active"}, "hl": {"pt-BR"}}
+	params := url.Values{"udm": {"2"}, "q": {query}, "safe": {"active"}, "hl": {"pt-BR"}}
 	if transparent {
 		params.Set("tbs", "ic:trans")
 	}
@@ -86,7 +86,7 @@ func GoogleImageSearchURL(query string, transparent bool) (string, error) {
 }
 
 func (m *ArtworkManager) ApplyWebImage(ctx context.Context, id, field string, result WebImage) error {
-	if !googleThumbnail(result.Thumbnail) || !publicImageURL(result.URL) {
+	if !publicImageURL(result.URL) || (result.Thumbnail != "" && !googleThumbnail(result.Thumbnail)) {
 		return fmt.Errorf("resultado de imagem inválido")
 	}
 	for _, source := range []string{result.URL, result.Thumbnail} {
@@ -94,9 +94,12 @@ func (m *ArtworkManager) ApplyWebImage(ctx context.Context, id, field string, re
 		if err == nil {
 			return m.setArtwork(ctx, id, field, path)
 		}
-		if result.URL == result.Thumbnail {
+		if result.Thumbnail == "" || result.URL == result.Thumbnail {
 			break
 		}
+	}
+	if result.Thumbnail == "" {
+		return fmt.Errorf("não foi possível baixar a imagem desse endereço")
 	}
 	return fmt.Errorf("não foi possível salvar a imagem original nem a miniatura")
 }

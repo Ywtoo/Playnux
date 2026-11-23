@@ -3,10 +3,13 @@ package main
 import (
 	"context"
 	"embed"
+	"fmt"
 	"log"
+	"os"
 
-	"github.com/playnux/ui/host"
 	coreapp "github.com/playnux/core/app"
+	"github.com/playnux/ui/host"
+	"github.com/playnux/ui/internal/release"
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/events"
 )
@@ -16,7 +19,14 @@ import (
 //go:embed all:frontend/dist
 var assets embed.FS
 
+//go:embed build/window-icon.png
+var appIcon []byte
+
 func main() {
+	if len(os.Args) == 2 && os.Args[1] == "--version" {
+		fmt.Println("Playnux " + release.Version())
+		return
+	}
 	dbPath, err := coreapp.DefaultDBPath()
 	if err != nil {
 		log.Fatalf("descobrir diretório de dados: %v", err)
@@ -31,7 +41,11 @@ func main() {
 
 	app := application.New(application.Options{
 		Name:        "Playnux",
-		Description: "Sua biblioteca de jogos no Linux",
+		Description: "Your game library on Linux",
+		Icon:        appIcon,
+		Linux: application.LinuxOptions{
+			ProgramName: "playnux",
+		},
 		Services: []application.Service{
 			application.NewService(service),
 		},
@@ -54,7 +68,7 @@ func main() {
 	}
 
 	width, height, minWidth, minHeight := host.FitWindowToScreen(app, 1280, 800, 960, 620)
-	window := app.Window.NewWithOptions(application.WebviewWindowOptions{
+	options := application.WebviewWindowOptions{
 		Title:                      "Playnux",
 		Width:                      width,
 		Height:                     height,
@@ -71,7 +85,10 @@ func main() {
 			Backdrop:                application.MacBackdropTranslucent,
 			TitleBar:                application.MacTitleBarHiddenInset,
 		},
-	})
+	}
+	preparePlayback := host.PrepareTrailerPlayback(&options)
+	window := app.Window.NewWithOptions(options)
+	preparePlayback(window)
 	host.Attach(service, app, window)
 	host.RegisterGameMenu(app)
 
@@ -86,5 +103,8 @@ func main() {
 
 	if err := app.Run(); err != nil {
 		log.Fatal(err)
+	}
+	if err := host.RelaunchAfterShutdown(service); err != nil {
+		log.Printf("could not restart Playnux after updating: %v", err)
 	}
 }

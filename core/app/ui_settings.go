@@ -5,16 +5,17 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/playnux/core/database"
 )
 
 const (
-	settingUITheme       = "ui.theme"
-	settingUIView        = "ui.view_mode"
-	settingUIGPU             = "ui.gpu_acceleration"
-	settingUITransitions     = "ui.transitions"
+	settingUITheme             = "ui.theme"
+	settingUIView              = "ui.view_mode"
+	settingUIGPU               = "ui.gpu_acceleration"
+	settingUITransitions       = "ui.transitions"
 	settingUIFontSize          = "ui.font_size"
 	settingUIBackgroundTrailer = "ui.background_trailer"
 	settingUIBigPictureTrailer = "ui.big_picture_trailer"
@@ -28,7 +29,7 @@ const (
 type UISettings struct {
 	Theme             string `json:"theme"`
 	ViewMode          string `json:"view_mode"`
-	FontSize          string `json:"font_size"` // "small", "medium", "large"
+	FontScale         int    `json:"font_scale"`
 	GPUAcceleration   bool   `json:"gpu_acceleration"`
 	Transitions       bool   `json:"transitions"`
 	BackgroundTrailer bool   `json:"background_trailer"`
@@ -40,7 +41,7 @@ func DefaultUISettings() UISettings {
 	return UISettings{
 		Theme:             ThemePlayniteDark,
 		ViewMode:          "details",
-		FontSize:          "medium",
+		FontScale:         100,
 		GPUAcceleration:   true,
 		Transitions:       true,
 		BackgroundTrailer: true,
@@ -62,7 +63,7 @@ func (c *App) UISettings(ctx context.Context) (UISettings, error) {
 		return settings, err
 	}
 	if raw, err := c.db.GetSetting(ctx, settingUIFontSize); err == nil {
-		settings.FontSize = raw
+		settings.FontScale = parseFontScale(raw)
 	} else if !errors.Is(err, database.ErrSettingNotFound) {
 		return settings, err
 	}
@@ -111,7 +112,7 @@ func (c *App) SaveUISettings(ctx context.Context, settings UISettings) error {
 	values := map[string]string{
 		settingUITheme:             settings.Theme,
 		settingUIView:              settings.ViewMode,
-		settingUIFontSize:          settings.FontSize,
+		settingUIFontSize:          strconv.Itoa(settings.FontScale),
 		settingUIGPU:               string(gpu),
 		settingUITransitions:       string(transitions),
 		settingUIBackgroundTrailer: string(bgTrailer),
@@ -135,18 +136,33 @@ func NormalizeUISettings(settings UISettings) UISettings {
 	if view != "grid" && view != "details" {
 		view = "details"
 	}
-	fontSize := strings.TrimSpace(settings.FontSize)
-	if fontSize != "small" && fontSize != "medium" && fontSize != "large" {
-		fontSize = "medium"
+	scale := settings.FontScale
+	if scale == 0 {
+		scale = 100
 	}
+	scale = min(160, max(80, scale))
 	return UISettings{
 		Theme:             theme,
 		ViewMode:          view,
-		FontSize:          fontSize,
+		FontScale:         scale,
 		GPUAcceleration:   settings.GPUAcceleration,
 		Transitions:       settings.Transitions,
 		BackgroundTrailer: settings.BackgroundTrailer,
 		BigPictureTrailer: settings.BigPictureTrailer,
+	}
+}
+
+func parseFontScale(raw string) int {
+	switch strings.TrimSpace(raw) {
+	case "small":
+		return 88
+	case "large":
+		return 112
+	case "medium":
+		return 100
+	default:
+		scale, _ := strconv.Atoi(strings.TrimSpace(raw))
+		return scale
 	}
 }
 

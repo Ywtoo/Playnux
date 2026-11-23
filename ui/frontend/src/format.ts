@@ -1,3 +1,4 @@
+import { language, t } from "./i18n";
 import type { Game } from "../bindings/github.com/playnux/core/models/models";
 
 const SOURCE_LABELS: Record<string, string> = {
@@ -9,8 +10,8 @@ const SOURCE_LABELS: Record<string, string> = {
   local: "DRM-free",
   flatpak: "Flatpak",
   manual: "Manual",
-  emulation: "Emulação",
-  "emulação": "Emulação",
+  emulation: t("Emulation"),
+  "emulação": t("Emulation"),
 };
 
 const SOURCE_CLASSES: Record<string, string> = {
@@ -26,7 +27,9 @@ const SOURCE_CLASSES: Record<string, string> = {
   "emulação": "emulation",
 };
 
-function keyOf(game: Game): string {
+type GameSource = Pick<Game, "source" | "plugin_id">;
+
+function keyOf(game: GameSource): string {
   const source = (game.source || "").trim().toLowerCase();
   if (SOURCE_LABELS[source]) {
     return source;
@@ -34,12 +37,18 @@ function keyOf(game: Game): string {
   return (game.plugin_id || game.source || "").trim().toLowerCase();
 }
 
-export function sourceLabel(game: Game): string {
+export function sourceLabel(game: GameSource): string {
   const key = keyOf(game);
   if (SOURCE_LABELS[key]) {
     return SOURCE_LABELS[key];
   }
-  return game.source || game.plugin_id || "Biblioteca";
+  return game.source || game.plugin_id || t("Library");
+}
+
+export function storeLabel(store: { id: string; name: string }): string {
+  if (store.id === "linux") return t("Linux games");
+  if (store.id === "emulation") return t("Emulation");
+  return store.name;
 }
 
 export function sourceClass(game: Game): string {
@@ -107,7 +116,7 @@ export function releaseYear(game: Game): string {
 
 export function lastPlayedLabel(value: string | null | undefined): string {
   if (!value) {
-    return "Nunca jogado";
+    return t("Never played");
   }
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) {
@@ -118,20 +127,15 @@ export function lastPlayedLabel(value: string | null | undefined): string {
   const target = new Date(date.getFullYear(), date.getMonth(), date.getDate());
   const days = Math.round((start.getTime() - target.getTime()) / 86_400_000);
   if (days === 0) {
-    return "Jogado hoje";
+    return t("Played today");
   }
   if (days === 1) {
-    return "Jogado ontem";
+    return t("Played yesterday");
   }
   if (days > 1 && days < 30) {
-    return `Jogado há ${days} dias`;
+    return t("Played {0} days ago", days);
   }
-  return `Jogado em ${date.toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" })}`;
-}
-
-export function cardSubtitle(game: Game): string {
-  const playtime = formatPlaytime(game.playtime);
-  return playtime ? `${sourceLabel(game)} · ${playtime}` : sourceLabel(game);
+  return t("Played on {0}", date.toLocaleDateString(language, { day: "2-digit", month: "short", year: "numeric" }));
 }
 
 // Descrições das lojas podem vir em HTML. A UI mostra texto puro (sem
@@ -167,14 +171,14 @@ export function canLaunch(game: Game): boolean {
 
 export function launchBlockReason(game: Game): string {
   if (!game.is_installed) {
-    return "Jogo não instalado na máquina";
+    return t("Game is not installed");
   }
   const key = keyOf(game);
   if (key === "xbox") {
-    return "Jogos Xbox não executam nativamente no Linux";
+    return t("Xbox games cannot launch natively on Linux");
   }
   if ((key === "emulation" || key === "emulação" || game.plugin_id === "emulation") && !game.executable) {
-    return "Nenhum emulador compatível foi encontrado para esta ROM";
+    return t("No compatible emulator was found for this ROM");
   }
   return "";
 }

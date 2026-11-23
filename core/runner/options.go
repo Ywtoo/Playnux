@@ -5,6 +5,7 @@ package runner
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -45,12 +46,15 @@ func Validate(game *models.Game, directory string, arguments []string, runner, p
 	case "", "auto":
 		runner, protonPath = "auto", ""
 	case "wine":
+		if _, err := exec.LookPath("wine"); err != nil {
+			return launcher.Options{}, fmt.Errorf("o Wine do sistema não foi encontrado")
+		}
 		protonPath = ""
 	case "proton":
 		if protonPath == "" {
 			return launcher.Options{}, fmt.Errorf("selecione uma versão do Proton")
 		}
-		if info, statErr := os.Stat(protonPath); statErr != nil || info.IsDir() || !filepath.IsAbs(protonPath) {
+		if info, statErr := os.Stat(protonPath); statErr != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0111 == 0 || !filepath.IsAbs(protonPath) {
 			return launcher.Options{}, fmt.Errorf("o executável do Proton selecionado não existe")
 		}
 	default:

@@ -1,3 +1,4 @@
+import { t } from "./i18n";
 import { Events } from "@wailsio/runtime";
 import type { Game } from "../bindings/github.com/playnux/core/models/models";
 
@@ -76,8 +77,9 @@ export function enterSleep(game: Game | null): void {
     document.documentElement.dataset.deepSleep = "true";
     defaultTitle = document.title;
     purgeImages();
+    document.dispatchEvent(new Event("playnux:media-visibility"));
   }
-  const label = game && game.name ? game.name : "Jogo em execução";
+  const label = game && game.name ? game.name : t("Game running");
   const title = titleElement();
   if (title) {
     title.textContent = label;
@@ -92,6 +94,7 @@ export function leaveSleep(): void {
   sleeping = false;
   restoreImages();
   delete document.documentElement.dataset.deepSleep;
+  document.dispatchEvent(new Event("playnux:media-visibility"));
   document.title = defaultTitle;
 }
 

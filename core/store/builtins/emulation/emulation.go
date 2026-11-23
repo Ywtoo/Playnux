@@ -659,15 +659,15 @@ func scanCatalog(roots []string, folderProfiles map[string]string, catalog []Emu
 	profiles := usableProfiles(catalog)
 
 	for _, root := range cleanFolders(roots) {
+		pick := func(path string) (EmulatorProfile, bool) { return bestProfile(path, profiles) }
 		if profileID := folderProfiles[root]; profileID != "" {
 			profile, found := FindProfile(catalog, profileID)
 			if !found || (profile.Executable == "" && profile.FlatpakID == "") {
 				continue
 			}
-			games = append(games, scanWithProfile(root, profile, seen)...)
-			continue
+			pick = func(path string) (EmulatorProfile, bool) { return profile, profile.Supports(path) }
 		}
-		games = append(games, scanAutomatic(root, profiles, seen)...)
+		games = append(games, scanRoot(root, folderProfiles, pick, seen)...)
 	}
 
 	sort.Slice(games, func(i, j int) bool {
@@ -690,51 +690,41 @@ func usableProfiles(catalog []EmulatorDefinition) []EmulatorProfile {
 	return result
 }
 
-func scanAutomatic(root string, profiles []EmulatorProfile, seen map[string]bool) []*models.Game {
-	var games []*models.Game
-	_ = filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
-		if skipDirectory(root, path, entry) {
-			return filepath.SkipDir
-		}
-		game, ok := scanFile(path, entry, walkErr, func(path string) (EmulatorProfile, bool) {
-			return bestProfile(path, profiles)
-		}, seen)
-		if ok {
-			games = append(games, game)
-		}
+func scanRoot(root string, folderProfiles map[string]string, pick func(string) (EmulatorProfile, bool), seen map[string]bool) []*models.Game {
+	// WalkDir does not follow a symlink at the root. Keep the configured path
+	// for game IDs and the launch command even when the root points elsewhere.
+	resolved, err := filepath.EvalSymlinks(root)
+	if err != nil {
 		return nil
-	})
-	return games
-}
-
-func scanWithProfile(root string, profile EmulatorProfile, seen map[string]bool) []*models.Game {
-	var games []*models.Game
-	_ = filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
-		if skipDirectory(root, path, entry) {
-			return filepath.SkipDir
-		}
-		game, ok := scanFile(path, entry, walkErr, func(path string) (EmulatorProfile, bool) {
-			if profile.Supports(path) {
-				return profile, true
-			}
-			return EmulatorProfile{}, false
-		}, seen)
-		if ok {
-			games = append(games, game)
-		}
-		return nil
-	})
-	return games
-}
-
-func skipDirectory(root, path string, entry os.DirEntry) bool {
-	return entry.IsDir() && path != root && strings.HasPrefix(entry.Name(), ".")
-}
-
-func scanFile(path string, entry os.DirEntry, walkErr error, pick func(string) (EmulatorProfile, bool), seen map[string]bool) (*models.Game, bool) {
-	if walkErr != nil || entry.IsDir() {
-		return nil, false
 	}
+	if info, err := os.Stat(resolved); err != nil || !info.IsDir() {
+		return nil
+	}
+	var games []*models.Game
+	_ = filepath.WalkDir(resolved, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return nil
+		}
+		relative, err := filepath.Rel(resolved, path)
+		if err != nil {
+			return err
+		}
+		path = filepath.Join(root, relative)
+		if entry.IsDir() {
+			if path != root && (strings.HasPrefix(entry.Name(), ".") || folderProfiles[path] != "") {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if game, ok := scanFile(path, entry, pick, seen); ok {
+			games = append(games, game)
+		}
+		return nil
+	})
+	return games
+}
+
+func scanFile(path string, entry os.DirEntry, pick func(string) (EmulatorProfile, bool), seen map[string]bool) (*models.Game, bool) {
 	if entry.Type()&os.ModeSymlink != 0 || seen[path] {
 		return nil, false
 	}
@@ -895,9 +885,6 @@ func cleanFolders(folders []string) []string {
 	for _, folder := range folders {
 		folder = filepath.Clean(strings.TrimSpace(folder))
 		if folder == "" || folder == "." || seen[folder] {
-			continue
-		}
-		if info, err := os.Stat(folder); err != nil || !info.IsDir() {
 			continue
 		}
 		seen[folder] = true

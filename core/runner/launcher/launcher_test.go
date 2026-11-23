@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -145,4 +146,32 @@ func TestLaunchLocalGameUsesInstallDirectory(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	t.Fatal("o jogo não encontrou o arquivo relativo ao diretório de instalação")
+}
+
+type diagnosticSink struct {
+	fakeSink
+	failed chan string
+}
+
+func (sink *diagnosticSink) LaunchFailed(_ *models.Game, message string) { sink.failed <- message }
+
+func TestLaunchReportsProcessFailureWithDiagnostics(t *testing.T) {
+	sink := &diagnosticSink{failed: make(chan string, 1)}
+	instance := New(map[string]store.StoreProvider{"fake": fakeProvider{}}, &fakeChecker{}, sink)
+	defer instance.Close()
+	game := &models.Game{ID: "broken", PluginID: "fake", Name: "Erro de teste"}
+	if err := instance.LaunchWithOptions(game, Options{
+		Command:     "/bin/sh",
+		CommandArgs: []string{"-c", "printf '%s\\n' 'runtime ausente' >&2; exit 7"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case message := <-sink.failed:
+		if !strings.Contains(message, "exit status 7") || !strings.Contains(message, "runtime ausente") {
+			t.Fatalf("diagnóstico = %q", message)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("erro assíncrono não foi registrado")
+	}
 }

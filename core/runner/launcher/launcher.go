@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -115,15 +116,52 @@ func (l *Launcher) LaunchWithOptions(game *models.Game, options Options) error {
 			cmd.Env = append(cmd.Env, key+"="+value)
 		}
 	}
+	var diagnostics stderrTail
+	cmd.Stderr = &diagnostics
+	cmd.WaitDelay = time.Second
 	if err := cmd.Start(); err != nil {
 		l.unmarkRunning(game.ID)
 		return fmt.Errorf("launcher: falha ao iniciar %s: %w", game.Name, err)
 	}
-	// Evita processos zumbis quando o comando é o próprio jogo (build nativo).
-	go func() { _ = cmd.Wait() }()
+	failed := make(chan struct{})
+	go func() {
+		err := cmd.Wait()
+		exit, ok := err.(*exec.ExitError)
+		if !ok {
+			return
+		}
+		close(failed)
+		reporter, ok := l.sink.(interface{ LaunchFailed(*models.Game, string) })
+		if !ok {
+			return
+		}
+		if exit.ExitCode() > 0 {
+			message := err.Error()
+			if output := strings.TrimSpace(string(diagnostics)); output != "" {
+				message += "\n" + output
+			}
+			reporter.LaunchFailed(game, message)
+		}
+	}()
 
-	go l.monitor(game)
+	go l.monitor(game, failed)
 	return nil
+}
+
+type stderrTail []byte
+
+func (tail *stderrTail) Write(data []byte) (int, error) {
+	const maxBytes = 2048
+	n := len(data)
+	if n >= maxBytes {
+		*tail = append((*tail)[:0], data[n-maxBytes:]...)
+		return n, nil
+	}
+	if excess := len(*tail) + n - maxBytes; excess > 0 {
+		*tail = (*tail)[:copy(*tail, (*tail)[excess:])]
+	}
+	*tail = append(*tail, data...)
+	return n, nil
 }
 
 // Close interrompe os monitores. Os processos dos jogos não são encerrados.
@@ -133,11 +171,16 @@ func (l *Launcher) Close() {
 	l.mu.Unlock()
 }
 
-func (l *Launcher) monitor(game *models.Game) {
+func (l *Launcher) monitor(game *models.Game, failed <-chan struct{}) {
 	defer l.unmarkRunning(game.ID)
 
 	deadline := time.Now().Add(l.StartTimeout)
 	for time.Now().Before(deadline) && !l.isClosed() {
+		select {
+		case <-failed:
+			return
+		default:
+		}
 		if l.checker.Running(game) {
 			l.sleep(game)
 			l.waitUntilStopped(game)

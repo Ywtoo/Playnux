@@ -1,3 +1,4 @@
+import { t } from "../../i18n";
 export interface AntiCheatInfo {
   found: boolean;
   name?: string;
@@ -11,11 +12,11 @@ export interface AntiCheatInfo {
 }
 
 const STATUS_LABELS: Record<string, string> = {
-  supported: "Suportado",
-  running: "Em execução",
-  broken: "Incompatível",
-  denied: "Banimento / Bloqueado",
-  planned: "Planejado",
+  supported: t("Supported"),
+  running: t("Running"),
+  broken: t("Incompatible"),
+  denied: t("Ban / Blocked"),
+  planned: t("Planned"),
 };
 
 /** Builds an anti-cheat status/warning banner. Returns null when not relevant. */
@@ -44,11 +45,11 @@ export function renderAntiCheatBanner(info: AntiCheatInfo | null | undefined): H
   tipHead.textContent = `${cheats} (${status})`;
   const tipText = document.createElement("p");
   if (info.warning) {
-    tipText.textContent = "Atenção: Incompatível ou sujeito a banimento ao rodar via Proton/Wine no Linux.";
+    tipText.textContent = t("Warning: incompatible or subject to bans when run through Proton or Wine on Linux.");
   } else if ((info.status || "").toLowerCase() === "running") {
-    tipText.textContent = "Funcional no Linux, mas pode exigir ajustes ou quebrar em novos patches.";
+    tipText.textContent = t("Works on Linux, with possible workarounds or regressions after updates.");
   } else {
-    tipText.textContent = "Totalmente suportado no Linux via Proton/Wine.";
+    tipText.textContent = t("Fully supported on Linux through Proton or Wine.");
   }
   tooltip.append(tipHead, tipText);
   banner.append(badge, tooltip);

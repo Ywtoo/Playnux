@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -17,8 +18,8 @@ import (
 )
 
 const (
-	reportsURL        = "https://protondb.max-p.me/games/%s/reports/"
-	fallbackReportURL = "https://proton-pulse.com/data/%s/latest.json"
+	reportsURL        = "https://www.proton-pulse.com/data/%s/latest.json"
+	fallbackReportURL = "https://protondb.max-p.me/games/%s/reports/"
 	summaryURL        = "https://www.protondb.com/api/v1/reports/summaries/%s.json"
 	cacheTTL          = 15 * time.Minute
 )
@@ -46,6 +47,9 @@ type Intelligence struct {
 	TotalReports    int            `json:"total_reports"`
 	Recommended     string         `json:"recommended,omitempty"`
 	RecommendedTier string         `json:"recommended_tier,omitempty"`
+	SampleSize      int            `json:"sample_size,omitempty"`
+	PositiveReports int            `json:"positive_reports,omitempty"`
+	NativeAvailable bool           `json:"native_available,omitempty"`
 	Basis           string         `json:"basis,omitempty"`
 	Recent          []RecentReport `json:"recent,omitempty"`
 	URL             string         `json:"url"`
@@ -108,10 +112,18 @@ func (c *Client) Fetch(ctx context.Context, appID string) (Intelligence, error) 
 		AppID: appID,
 		URL:   "https://www.protondb.com/app/" + appID,
 	}
+	type summaryResponse struct {
+		value summary
+		err   error
+	}
+	summaries := make(chan summaryResponse, 1)
+	go func() {
+		value, err := c.fetchSummary(ctx, appID)
+		summaries <- summaryResponse{value, err}
+	}()
 	reports, reportsErr := c.fetchReports(ctx, c.ReportsURL, appID)
 	if len(reports) == 0 && c.FallbackReportsURL != "" {
-		// The legacy max-p dataset is stale for many recent titles. Proton Pulse
-		// mirrors the monthly ProtonDB dumps and keeps per-report versions.
+		// Prefer the monthly mirror. The legacy mirror can still cover older titles.
 		if fallback, fallbackErr := c.fetchReports(ctx, c.FallbackReportsURL, appID); len(fallback) > 0 {
 			reports = fallback
 			reportsErr = nil
@@ -122,27 +134,36 @@ func (c *Client) Fetch(ctx context.Context, appID string) (Intelligence, error) 
 	if len(reports) > 0 {
 		derive(&intel, reports)
 	}
-	if !intel.Available || intel.Tier == "" {
-		summaryValue, summaryErr := c.fetchSummary(ctx, appID)
-		if summaryErr != nil {
-			if reportsErr != nil && len(reports) == 0 {
-				return Intelligence{}, reportsErr
+	storeSummary := <-summaries
+	if storeSummary.err == nil {
+		value := storeSummary.value
+		officialTier := normalizedTier(value.Tier)
+		if officialTier == "" || officialTier == "pending" {
+			if provisional := normalizedTier(value.ProvisionalTier); provisional != "" {
+				officialTier = provisional
 			}
-			return Intelligence{}, summaryErr
 		}
-		intel.Available = true
-		intel.Tier = normalizedTier(summaryValue.Tier)
-		if intel.Tier == "" || intel.Tier == "pending" {
-			intel.Tier = normalizedTier(summaryValue.ProvisionalTier)
+		if officialTier == "" {
+			officialTier = normalizedTier(value.BestReportedTier)
 		}
-		if intel.Tier == "" {
-			intel.Tier = normalizedTier(summaryValue.BestReportedTier)
+		if officialTier != "" {
+			intel.Available = true
+			intel.Tier = officialTier
+			intel.NativeAvailable = intel.NativeAvailable || officialTier == "native"
+			if value.Confidence != "" {
+				intel.Confidence = value.Confidence
+			}
 		}
-		if intel.TotalReports == 0 {
-			intel.TotalReports = summaryValue.Total
+		intel.TotalReports = max(intel.TotalReports, value.Total)
+	}
+	if !intel.Available && storeSummary.err != nil {
+		if reportsErr != nil {
+			return Intelligence{}, reportsErr
 		}
-		intel.Confidence = summaryValue.Confidence
-		intel.Basis = "No recent Platinum/Gold reports; use Proton Experimental or the store default."
+		return Intelligence{}, storeSummary.err
+	}
+	if intel.Basis == "" {
+		intel.Basis = "Os relatos disponíveis não indicam uma versão específica do Proton."
 	}
 
 	c.mu.Lock()
@@ -232,34 +253,62 @@ func derive(intel *Intelligence, reports []Report) {
 	intel.TotalReports = len(filtered)
 	intel.Tier = winningTier(filtered)
 	intel.Confidence = confidenceFor(len(filtered))
-	intel.Recent = make([]RecentReport, 0, 5)
-	for index, report := range filtered {
-		if index == 5 {
-			break
-		}
-		intel.Recent = append(intel.Recent, RecentReport{
-			Rating:        report.Rating,
-			ProtonVersion: report.ProtonVersion,
-			Timestamp:     report.Timestamp,
-		})
+	intel.NativeAvailable = intel.Tier == "native"
+	const sampleLimit = 10
+	sample := filtered[:min(sampleLimit, len(filtered))]
+	intel.SampleSize = len(sample)
+	intel.Recent = make([]RecentReport, 0, len(sample))
+	type versionScore struct {
+		version  string
+		tier     string
+		positive int
+		negative int
 	}
-
-	for _, report := range filtered {
-		if report.Rating != "platinum" && report.Rating != "gold" {
-			continue
+	tallies := make(map[string]*versionScore)
+	var ranked []*versionScore
+	for _, report := range sample {
+		intel.Recent = append(intel.Recent, RecentReport{
+			Rating: report.Rating, ProtonVersion: report.ProtonVersion, Timestamp: report.Timestamp,
+		})
+		if report.Rating == "native" {
+			intel.NativeAvailable = true
 		}
-		version := strings.TrimSpace(report.ProtonVersion)
+		version := displayVersion(report.ProtonVersion)
 		if version == "" {
 			continue
 		}
-		intel.Recommended = displayVersion(version)
-		intel.RecommendedTier = report.Rating
-		intel.Basis = fmt.Sprintf("Based on the latest %s reports.", titleCase(report.Rating))
-		break
+		key := strings.NewReplacer(" ", "", "-x86_64", "", "-arm64", "").Replace(strings.ToLower(version))
+		entry := tallies[key]
+		if entry == nil {
+			entry = &versionScore{version: version}
+			tallies[key] = entry
+			ranked = append(ranked, entry)
+		}
+		switch report.Rating {
+		case "platinum", "gold":
+			entry.positive++
+			if entry.tier == "" {
+				entry.tier = report.Rating
+			}
+		case "bronze", "borked":
+			entry.negative++
+		}
 	}
-	if intel.Recommended == "" {
-		intel.Basis = "No recent Platinum/Gold reports; use Proton Experimental or the store default."
+	var best *versionScore
+	for _, candidate := range ranked {
+		score := candidate.positive - candidate.negative
+		if score > 0 && (best == nil || score > best.positive-best.negative ||
+			(score == best.positive-best.negative && candidate.positive > best.positive)) {
+			best = candidate
+		}
 	}
+	if best != nil {
+		intel.Recommended = best.version
+		intel.RecommendedTier = best.tier
+		intel.PositiveReports = best.positive
+		intel.Basis = fmt.Sprintf("%d relato(s) Gold ou Platinum entre os %d mais recentes.", best.positive, len(sample))
+	}
+
 }
 
 func winningTier(reports []Report) string {
@@ -297,6 +346,8 @@ func confidenceFor(count int) string {
 
 func tierRank(tier string) int {
 	switch tier {
+	case "native":
+		return 6
 	case "platinum":
 		return 5
 	case "gold":
@@ -314,24 +365,30 @@ func tierRank(tier string) int {
 func normalizedTier(value string) string {
 	value = strings.ToLower(strings.TrimSpace(value))
 	switch value {
-	case "platinum", "gold", "silver", "bronze", "borked", "pending":
+	case "platinum", "gold", "silver", "bronze", "borked", "pending", "native":
 		return value
 	}
 	return ""
 }
 
+var reportedProtonVersion = regexp.MustCompile(`(?i)^(?:ge[- ]proton[- ]*|proton[- ]*)?\d+(?:[.-]\d+)+(?:[a-z0-9.-]*)$`)
+
 func displayVersion(value string) string {
-	if value != "" && value[0] >= '0' && value[0] <= '9' {
+	value = strings.TrimSpace(value)
+	lower := strings.ToLower(value)
+	switch lower {
+	case "experimental", "proton experimental", "proton - experimental", "proton-experimental":
+		return "Proton Experimental"
+	case "hotfix", "proton hotfix", "proton - hotfix", "proton-hotfix":
+		return "Proton Hotfix"
+	}
+	if !reportedProtonVersion.MatchString(value) {
+		return ""
+	}
+	if value[0] >= '0' && value[0] <= '9' {
 		return "Proton " + value
 	}
 	return value
-}
-
-func titleCase(value string) string {
-	if value == "" {
-		return ""
-	}
-	return strings.ToUpper(value[:1]) + value[1:]
 }
 
 // UnmarshalJSON accepts timestamps encoded as numbers or strings.

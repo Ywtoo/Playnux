@@ -8,8 +8,25 @@ import (
 
 // RegisterGameMenu attaches GTK's context menu to game rows and covers.
 func RegisterGameMenu(app *application.App) {
+	registerGameMenu(app, "en")
+}
+
+func (h *Host) SetInterfaceLanguage(language string) {
+	h.mu.RLock()
+	app := h.app
+	h.mu.RUnlock()
+	if app != nil {
+		application.InvokeSync(func() { registerGameMenu(app, language) })
+	}
+}
+
+func registerGameMenu(app *application.App, language string) {
 	menu := app.ContextMenu.New()
-	add := func(label, action string) {
+	add := func(english, portuguese, action string) {
+		label := english
+		if language == "pt-BR" {
+			label = portuguese
+		}
 		menu.Add(label).OnClick(func(ctx *application.Context) {
 			id := strings.TrimSpace(ctx.ContextMenuData())
 			if id != "" {
@@ -17,13 +34,13 @@ func RegisterGameMenu(app *application.App) {
 			}
 		})
 	}
-	add("Jogar", "play")
-	add("Ver detalhes", "details")
+	add("Play", "Jogar", "play")
+	add("View details", "Ver detalhes", "details")
 	menu.AddSeparator()
-	add("Baixar metadados…", "metadata")
-	add("Editar capa…", "cover")
-	add("Editar ícone…", "icon")
+	add("Download metadata…", "Baixar metadados…", "metadata")
+	add("Edit cover…", "Editar capa…", "cover")
+	add("Edit icon…", "Editar ícone…", "icon")
 	menu.AddSeparator()
-	add("Propriedades de inicialização…", "launch")
+	add("Launch options…", "Propriedades de inicialização…", "launch")
 	app.ContextMenu.Add("playnux-game", menu)
 }

@@ -37,13 +37,15 @@ type GOGProvider struct {
 	client             *http.Client
 	authBase           string
 	embedBase          string
+	productBase        string
 }
 
 func NewGOGProvider() *GOGProvider {
 	return &GOGProvider{
-		client:    &http.Client{Timeout: 20 * time.Second},
-		authBase:  gogAuthBase,
-		embedBase: gogEmbedBase,
+		client:      &http.Client{Timeout: 20 * time.Second},
+		authBase:    gogAuthBase,
+		embedBase:   gogEmbedBase,
+		productBase: "https://api.gog.com",
 	}
 }
 
@@ -59,13 +61,11 @@ func (g *GOGProvider) ID() string { return "gog" }
 
 func (g *GOGProvider) Name() string { return "GOG Galaxy" }
 
-// WebLogin descreve a janela oficial de login da GOG para a ponte WebView.
 func (g *GOGProvider) WebLogin() store.WebLoginSpec {
 	return store.WebLoginSpec{
 		URL: g.authBase + "/auth?client_id=" + gogClientID +
 			"&redirect_uri=" + url.QueryEscape(gogRedirectURI) +
-			"&response_type=code&layout=client2",
-		CookieNames:       []string{"access_token", "exchange_code"},
+			"&response_type=code&layout=galaxy",
 		RedirectURLPrefix: "https://embed.gog.com/on_login_success",
 	}
 }
@@ -75,6 +75,7 @@ func (g *GOGProvider) Authenticate(ctx context.Context, auth store.StoreAuth) er
 		return fmt.Errorf("gog: access token ou refresh token obrigatório")
 	}
 
+	auth.Cookies = ""
 	g.auth = auth
 	if g.auth.AccessToken == "" || tokenExpired(g.auth.ExpiresAt) {
 		if g.auth.RefreshToken == "" {
@@ -115,7 +116,6 @@ func (g *GOGProvider) refresh(ctx context.Context) error {
 	if auth.AccountID == "" {
 		auth.AccountID = g.auth.AccountID
 	}
-	auth.Cookies = g.auth.Cookies
 	g.auth = auth
 	return nil
 }
@@ -144,7 +144,7 @@ func (g *GOGProvider) requestToken(ctx context.Context, form url.Values) (store.
 
 	resp, err := g.client.Do(req)
 	if err != nil {
-		return store.StoreAuth{}, fmt.Errorf("gog oauth: %w", err)
+		return store.StoreAuth{}, fmt.Errorf("gog oauth: falha na comunicação com o servidor")
 	}
 	defer resp.Body.Close()
 
@@ -153,8 +153,7 @@ func (g *GOGProvider) requestToken(ctx context.Context, form url.Values) (store.
 		return store.StoreAuth{}, err
 	}
 	if resp.StatusCode != http.StatusOK {
-		return store.StoreAuth{}, fmt.Errorf("gog oauth retornou status %d: %s",
-			resp.StatusCode, strings.TrimSpace(string(body)))
+		return store.StoreAuth{}, fmt.Errorf("gog oauth retornou status %d", resp.StatusCode)
 	}
 
 	var token gogTokenResponse
@@ -188,7 +187,9 @@ func (g *GOGProvider) FetchLibrary(ctx context.Context) ([]*models.Game, error) 
 	games := make(map[string]*models.Game)
 	for _, entry := range heroic.GOGLibrary() {
 		game := gameFromLocal(entry)
-		games[game.GameID] = game
+		if !IsLibraryExtra(game) {
+			games[game.GameID] = game
+		}
 	}
 
 	if !g.IsAuthenticated() {
@@ -203,19 +204,15 @@ func (g *GOGProvider) FetchLibrary(ctx context.Context) ([]*models.Game, error) 
 		return nil, err
 	}
 
-	// Garante uma entrada mesmo se os detalhes de algum produto falharem.
-	for _, id := range owned {
-		if _, ok := games[id]; !ok {
-			games[id] = minimalGame(id)
-		}
-	}
-
 	details, detailErr := g.fetchDetails(ctx, owned)
 	if detailErr != nil && len(details) == 0 {
 		return nil, detailErr
 	}
 	for id, detail := range details {
 		game := gameFromRecord(id, detail)
+		if game == nil {
+			continue
+		}
 		if local, ok := games[id]; ok {
 			mergeInstallState(game, local)
 		}
@@ -231,7 +228,9 @@ func (g *GOGProvider) FetchInstalled(context.Context) ([]*models.Game, error) {
 	entries := heroic.GOGLibrary()
 	games := make([]*models.Game, 0, len(entries))
 	for _, entry := range entries {
-		games = append(games, gameFromLocal(entry))
+		if game := gameFromLocal(entry); game.IsInstalled && !IsLibraryExtra(game) {
+			games = append(games, game)
+		}
 	}
 	return games, nil
 }
@@ -285,6 +284,8 @@ func (g *GOGProvider) ownedGameIDs(ctx context.Context) ([]string, error) {
 
 type gogDetails struct {
 	Title            string `json:"title"`
+	ProductType      string `json:"productType"`
+	IsDLC            bool   `json:"isDlc"`
 	Image            string `json:"image"`
 	BackgroundImage  string `json:"backgroundImage"`
 	Description      string `json:"description"`
@@ -325,6 +326,24 @@ func (g *GOGProvider) fetchDetails(ctx context.Context, ids []string) (map[strin
 			}
 
 			details, err := g.gameDetails(ctx, id)
+			if err != nil || details.ProductType == "" {
+				if product, catalogErr := g.productDetails(ctx, id); catalogErr == nil {
+					if err != nil {
+						details, err = product, nil
+					} else {
+						details.ProductType = product.ProductType
+						if goodTitle(product.Title, id) {
+							details.Title = product.Title
+						}
+						if details.Image == "" {
+							details.Image = product.Image
+						}
+						if details.BackgroundImage == "" {
+							details.BackgroundImage = product.BackgroundImage
+						}
+					}
+				}
+			}
 			mu.Lock()
 			defer mu.Unlock()
 			if err != nil {
@@ -369,10 +388,67 @@ func (g *GOGProvider) gameDetails(ctx context.Context, id string) (*gogDetails, 
 	return &details, nil
 }
 
+func (g *GOGProvider) productDetails(ctx context.Context, id string) (*gogDetails, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, g.productBase+"/products/"+url.PathEscape(id), nil)
+	if err != nil {
+		return nil, err
+	}
+	response, err := g.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("GOG catalogue: status %d", response.StatusCode)
+	}
+	var product struct {
+		Title       string `json:"title"`
+		GameType    string `json:"game_type"`
+		ProductType string `json:"productType"`
+		Images      struct {
+			BoxArt     string `json:"boxArt"`
+			Background string `json:"background"`
+		} `json:"images"`
+	}
+	if err := json.NewDecoder(io.LimitReader(response.Body, 4<<20)).Decode(&product); err != nil {
+		return nil, err
+	}
+	kind := product.GameType
+	if kind == "" {
+		kind = product.ProductType
+	}
+	return &gogDetails{Title: product.Title, ProductType: kind, Image: product.Images.BoxArt,
+		BackgroundImage: product.Images.Background}, nil
+}
+
+func goodTitle(name, id string) bool {
+	title := strings.TrimSpace(name)
+	return title != "" && title != id
+}
+
+func isExtraTitle(name string) bool {
+	title := strings.ToLower(strings.TrimSpace(name))
+	for _, suffix := range []string{" soundtrack", " original soundtrack", " (soundtrack)", " - soundtrack", " artbook", " art book", " digital extras", " bonus content", " goodies"} {
+		if strings.HasSuffix(title, suffix) {
+			return true
+		}
+	}
+	return false
+}
+
+func IsLibraryExtra(game *models.Game) bool {
+	return game.PluginID == "gog" && !game.IsCustomGame && !game.IsInstalled &&
+		(!goodTitle(game.Name, game.GameID) || isExtraTitle(game.Name))
+}
+
 func gameFromRecord(id string, details *gogDetails) *models.Game {
-	name := details.Title
-	if name == "" {
-		name = id
+	name := strings.TrimSpace(details.Title)
+	if !goodTitle(name, id) || isExtraTitle(name) || details.IsDLC {
+		return nil
+	}
+	switch strings.ToLower(details.ProductType) {
+	case "dlc", "bonus", "soundtrack", "movie", "video", "extra", "pack":
+		return nil
 	}
 
 	game := &models.Game{
@@ -408,17 +484,6 @@ func gameFromRecord(id string, details *gogDetails) *models.Game {
 		}
 	}
 	return game
-}
-
-func minimalGame(id string) *models.Game {
-	return &models.Game{
-		GameID:      id,
-		PluginID:    "gog",
-		Source:      "GOG",
-		Name:        id,
-		SortingName: id,
-		Platforms:   []string{"PC (Windows)"},
-	}
 }
 
 func gameFromLocal(entry *heroic.Entry) *models.Game {

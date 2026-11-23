@@ -1,5 +1,5 @@
+import { t } from "./i18n";
 import { Window } from "@wailsio/runtime";
-import * as Host from "../bindings/github.com/playnux/ui/host/host.js";
 import type { Game } from "../bindings/github.com/playnux/core/models/models";
 import {
   canLaunch,
@@ -10,10 +10,12 @@ import {
   releaseYear,
   sourceLabel,
 } from "./format";
-import { trailerEmbedURL } from "./media";
+import { backgroundTrailer } from "./media";
+import { setArtworkImage } from "./artwork-images";
 
 export interface BigPictureOptions {
   root: HTMLElement;
+  trailersEnabled: () => boolean;
   onLaunch: (game: Game) => void;
   onExit?: () => void;
   onError: (error: unknown) => void;
@@ -33,6 +35,9 @@ interface PadState {
   down: boolean;
   a: boolean;
   b: boolean;
+  x: boolean;
+  previousPage: boolean;
+  nextPage: boolean;
 }
 
 const EMPTY_PAD: PadState = {
@@ -42,28 +47,33 @@ const EMPTY_PAD: PadState = {
   down: false,
   a: false,
   b: false,
+  x: false,
+  previousPage: false,
+  nextPage: false,
 };
 
 function element<T extends HTMLElement>(root: ParentNode, selector: string): T {
   const found = root.querySelector<T>(selector);
   if (!found) {
-    throw new Error(`Big Picture: elemento ${selector} não encontrado`);
+    throw new Error(t("Big Picture element {0} is missing", selector));
   }
   return found;
 }
 
 export function createBigPicture(options: BigPictureOptions): BigPictureController {
-  const { root, onLaunch, onExit, onError } = options;
+  const { root, onLaunch, onExit, onError, trailersEnabled } = options;
   const background = element<HTMLImageElement>(root, "#big-bg");
   const logo = element<HTMLImageElement>(root, "#big-logo");
   const title = element<HTMLElement>(root, "#big-title");
   const meta = element<HTMLElement>(root, "#big-meta");
   const source = element<HTMLElement>(root, "#big-source");
   const play = element<HTMLButtonElement>(root, "#big-play");
-  const video = element<HTMLElement>(root, "#big-video");
+  const sound = element<HTMLButtonElement>(root, "#big-trailer-sound");
+  const video = backgroundTrailer(element(root, "#big-video"), sound, true);
   const carousel = element<HTMLElement>(root, "#big-carousel");
+  const position = element<HTMLElement>(root, "#big-position");
   const closeButton = element<HTMLButtonElement>(root, "#big-close");
-  const content = element<HTMLElement>(root, ".big-content");
+
 
   let active = false;
   let changingFullscreen = false;
@@ -72,39 +82,19 @@ export function createBigPicture(options: BigPictureOptions): BigPictureControll
   let index = 0;
   let padTimer = 0;
   let lastPad: PadState = { ...EMPTY_PAD };
+  let highlighted: HTMLElement | null = null;
+  let restoreFocus: HTMLElement | null = null;
 
   function selected(): Game | null {
     return games[index] || null;
   }
 
-  async function renderVideo(game: Game): Promise<void> {
-    video.replaceChildren();
-    try {
-      const settings = await Host.GetUISettings();
-      if (!settings.big_picture_trailer) {
-        video.hidden = true;
-        return;
-      }
-    } catch {
-      // continua se não conseguir ler
-    }
-    const url = trailerEmbedURL(game.trailer_url || "", {
-      autoplay: true,
-      muted: true,
-      background: true,
-    });
-    if (!url) {
-      video.hidden = true;
-      return;
-    }
-    const frame = document.createElement("iframe");
-    frame.src = url;
-    frame.title = `Trailer de ${game.name}`;
-    frame.allow = "autoplay; encrypted-media; picture-in-picture";
-    frame.referrerPolicy = "strict-origin-when-cross-origin";
-    video.append(frame);
-    video.hidden = false;
+  function updateTrailer(): void {
+    video.set(selected(), active && trailersEnabled());
   }
+
+  document.addEventListener("visibilitychange", updateTrailer);
+  document.addEventListener("playnux:media-visibility", updateTrailer);
 
   function renderCarousel(): void {
     const items = games.map((game, itemIndex) => {
@@ -113,18 +103,19 @@ export function createBigPicture(options: BigPictureOptions): BigPictureControll
       button.className = "big-item";
       button.dataset.index = String(itemIndex);
       button.setAttribute("aria-label", game.name);
-      button.classList.toggle("is-selected", itemIndex === index);
+      button.tabIndex = -1;
 
       const cover = document.createElement("div");
       cover.className = "big-item-cover";
+      cover.textContent = initials(game.name);
       if (game.cover_image) {
         const image = document.createElement("img");
-        image.src = game.cover_image;
         image.alt = "";
         image.loading = "lazy";
+        image.decoding = "async";
+        image.addEventListener("load", () => image.classList.add("is-loaded"), { once: true });
+        setArtworkImage(image, game.cover_image, devicePixelRatio > 2 ? "carousel-hd" : "carousel");
         cover.append(image);
-      } else {
-        cover.textContent = initials(game.name);
       }
       const label = document.createElement("span");
       label.textContent = game.name;
@@ -132,29 +123,43 @@ export function createBigPicture(options: BigPictureOptions): BigPictureControll
       return button;
     });
     carousel.replaceChildren(...items);
-    const activeItem = carousel.querySelector<HTMLElement>(`.big-item[data-index="${index}"]`);
-    activeItem?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+    highlighted = null;
+  }
+
+  function highlight(): void {
+    const item = carousel.children[index] as HTMLElement | undefined;
+    if (!item || item === highlighted) return;
+    const moveFocus = document.activeElement === highlighted;
+    highlighted?.classList.remove("is-selected");
+    highlighted?.removeAttribute("aria-current");
+    if (highlighted) highlighted.tabIndex = -1;
+    item.classList.add("is-selected");
+    item.setAttribute("aria-current", "true");
+    item.tabIndex = 0;
+    highlighted = item;
+    position.textContent = `${index + 1} / ${games.length}`;
+    item.scrollIntoView({ behavior: "instant", block: "nearest", inline: "center" });
+    if (moveFocus) item.focus({ preventScroll: true });
   }
 
   function render(): void {
     const game = selected();
     if (!game) {
-      title.textContent = "Sua biblioteca está vazia";
+      title.textContent = t("Your library is empty");
       meta.textContent = "";
       source.textContent = "";
       play.disabled = true;
+      position.textContent = "";
       background.removeAttribute("src");
       logo.hidden = true;
-      video.replaceChildren();
-      video.hidden = true;
-      carousel.replaceChildren();
+      video.stop();
       return;
     }
 
     document.title = `${game.name} — Playnux Fullscreen`;
     const backdrop = game.background_image || game.cover_image || "";
     if (backdrop) {
-      background.src = backdrop;
+      setArtworkImage(background, backdrop, "big-banner");
     } else {
       background.removeAttribute("src");
     }
@@ -166,7 +171,7 @@ export function createBigPicture(options: BigPictureOptions): BigPictureControll
       title.hidden = false;
     };
     if (game.logo_image) {
-      logo.src = game.logo_image;
+      setArtworkImage(logo, game.logo_image, "logo-hd");
       logo.hidden = false;
       title.hidden = true;
     } else {
@@ -185,14 +190,11 @@ export function createBigPicture(options: BigPictureOptions): BigPictureControll
     meta.textContent = metaParts.join("  ·  ");
 
     play.disabled = !canLaunch(game);
-    play.title = canLaunch(game) ? `Jogar ${game.name}` : launchBlockReason(game);
-    play.textContent = canLaunch(game) ? "▶  JOGAR" : "INDISPONÍVEL";
+    play.title = canLaunch(game) ? t("Play {0}", game.name) : launchBlockReason(game);
+    play.textContent = canLaunch(game) ? t("▶  PLAY") : t("UNAVAILABLE");
 
-    renderVideo(game);
-    renderCarousel();
-    content.classList.remove("is-entering");
-    void content.offsetWidth;
-    content.classList.add("is-entering");
+    updateTrailer();
+    highlight();
   }
 
   function move(delta: number): void {
@@ -200,6 +202,13 @@ export function createBigPicture(options: BigPictureOptions): BigPictureControll
       return;
     }
     index = (index + delta + games.length) % games.length;
+    render();
+  }
+
+  function movePage(direction: number): void {
+    const itemWidth = (highlighted?.offsetWidth ?? 105) + 12;
+    const step = Math.max(1, Math.floor(carousel.clientWidth / itemWidth) - 1);
+    index = Math.max(0, Math.min(games.length - 1, index + direction * step));
     render();
   }
 
@@ -232,6 +241,9 @@ export function createBigPicture(options: BigPictureOptions): BigPictureControll
       down: pressed(13) || axis(pad.axes[1]) > 0.55,
       a: pressed(0),
       b: pressed(1),
+      x: pressed(2),
+      previousPage: pressed(4),
+      nextPage: pressed(5),
     };
   }
 
@@ -249,6 +261,9 @@ export function createBigPicture(options: BigPictureOptions): BigPictureControll
     if (current.a && !lastPad.a) {
       launch();
     }
+    if (current.previousPage && !lastPad.previousPage) movePage(-1);
+    if (current.nextPage && !lastPad.nextPage) movePage(1);
+    if (current.x && !lastPad.x && !sound.hidden) sound.click();
     if (current.b && !lastPad.b) {
       close();
       return;
@@ -261,6 +276,16 @@ export function createBigPicture(options: BigPictureOptions): BigPictureControll
       return;
     }
     switch (event.key) {
+      case "Tab": {
+        const controls = [sound, closeButton, play, highlighted].filter((control): control is HTMLElement =>
+          Boolean(control && !control.hidden && !(control instanceof HTMLButtonElement && control.disabled)));
+        const current = controls.indexOf(document.activeElement as HTMLElement);
+        const offset = event.shiftKey ? -1 : 1;
+        const next = current < 0 ? (event.shiftKey ? controls.length - 1 : 0) : (current + offset + controls.length) % controls.length;
+        event.preventDefault();
+        controls[next]?.focus({ preventScroll: true });
+        break;
+      }
       case "ArrowLeft":
       case "ArrowUp":
         event.preventDefault();
@@ -281,7 +306,13 @@ export function createBigPicture(options: BigPictureOptions): BigPictureControll
         index = Math.max(0, games.length - 1);
         render();
         break;
+      case "PageUp":
+      case "PageDown":
+        event.preventDefault();
+        movePage(event.key === "PageUp" ? -1 : 1);
+        break;
       case "Enter":
+        if (event.target instanceof HTMLButtonElement && root.contains(event.target) && !carousel.contains(event.target)) break;
         event.preventDefault();
         launch();
         break;
@@ -316,10 +347,11 @@ export function createBigPicture(options: BigPictureOptions): BigPictureControll
       return;
     }
     active = false;
+    carousel.replaceChildren();
+    highlighted = null;
     root.classList.remove("is-open");
     root.setAttribute("aria-hidden", "true");
-    video.replaceChildren();
-    video.hidden = true;
+    video.stop();
     window.clearInterval(padTimer);
     padTimer = 0;
     document.removeEventListener("keydown", onKeyDown);
@@ -330,6 +362,8 @@ export function createBigPicture(options: BigPictureOptions): BigPictureControll
       });
     }
     document.title = "Playnux";
+    restoreFocus?.focus({ preventScroll: true });
+    restoreFocus = null;
     onExit?.();
   }
 
@@ -337,6 +371,7 @@ export function createBigPicture(options: BigPictureOptions): BigPictureControll
     if (active || changingFullscreen) {
       return;
     }
+    restoreFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     changingFullscreen = true;
     try {
       restoreWindow = !(await Window.IsFullscreen());
@@ -356,7 +391,9 @@ export function createBigPicture(options: BigPictureOptions): BigPictureControll
     document.addEventListener("keydown", onKeyDown);
     window.clearInterval(padTimer);
     padTimer = window.setInterval(pollGamepad, 140);
+    renderCarousel();
     render();
+    (highlighted ?? closeButton).focus({ preventScroll: true });
   }
 
   function setGames(nextGames: Game[]): void {
@@ -365,7 +402,10 @@ export function createBigPicture(options: BigPictureOptions): BigPictureControll
     const found = currentID ? games.findIndex((game) => game.id === currentID) : -1;
     index = found >= 0 ? found : 0;
     if (active) {
+      const focusedGame = carousel.contains(document.activeElement);
+      renderCarousel();
       render();
+      if (focusedGame) (highlighted ?? closeButton).focus({ preventScroll: true });
     }
   }
 

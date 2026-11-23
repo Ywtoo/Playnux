@@ -9,6 +9,10 @@ import (
 
 func TestFetchDerivesRecommendationFromRecentPositiveReports(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/summary/123.json" {
+			_, _ = w.Write([]byte(`{}`))
+			return
+		}
 		if r.URL.Path != "/games/123/reports/" {
 			t.Fatalf("unexpected path: %s", r.URL.Path)
 		}
@@ -17,7 +21,7 @@ func TestFetchDerivesRecommendationFromRecentPositiveReports(t *testing.T) {
 			{"rating":"borked","protonVersion":"Proton 8.0","timestamp":500},
 			{"rating":"gold","protonVersion":"Proton 9.0-3","timestamp":"400"},
 			{"rating":"platinum","protonVersion":"GE-Proton 9-24","timestamp":300},
-			{"rating":"platinum","protonVersion":"GE-Proton 9-20","timestamp":200}
+			{"rating":"platinum","protonVersion":"GE-Proton 9-24","timestamp":200}
 		]`))
 	}))
 	defer server.Close()
@@ -32,7 +36,7 @@ func TestFetchDerivesRecommendationFromRecentPositiveReports(t *testing.T) {
 	if !intel.Available || intel.Tier != "platinum" {
 		t.Fatalf("intelligence = %+v", intel)
 	}
-	if intel.Recommended != "Proton 9.0-3" || intel.RecommendedTier != "gold" {
+	if intel.Recommended != "GE-Proton 9-24" || intel.RecommendedTier != "platinum" || intel.PositiveReports != 2 {
 		t.Fatalf("recommendation = %q (%s)", intel.Recommended, intel.RecommendedTier)
 	}
 	if intel.TotalReports != 4 || len(intel.Recent) != 4 {
@@ -53,6 +57,8 @@ func TestFetchUsesFallbackReportsWhenLegacyDatasetIsEmpty(t *testing.T) {
 			_, _ = w.Write([]byte(`[]`))
 		case "/pulse/555/latest.json":
 			_, _ = w.Write([]byte(`[{"rating":"platinum","protonVersion":"GE-Proton 9-24","timestamp":100}]`))
+		case "/summary/555.json":
+			_, _ = w.Write([]byte(`{"tier":"native"}`))
 		default:
 			t.Fatalf("unexpected path: %s", r.URL.Path)
 		}
@@ -67,7 +73,7 @@ func TestFetchUsesFallbackReportsWhenLegacyDatasetIsEmpty(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if intel.Tier != "platinum" || intel.Recommended != "GE-Proton 9-24" {
+	if intel.Tier != "native" || !intel.NativeAvailable || intel.Recommended != "GE-Proton 9-24" {
 		t.Fatalf("intelligence = %+v", intel)
 	}
 }

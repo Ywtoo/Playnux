@@ -1,46 +1,28 @@
-import { Browser } from "@wailsio/runtime";
 import * as Host from "../bindings/github.com/playnux/ui/host/host.js";
 import type { Game } from "../bindings/github.com/playnux/core/models/models.js";
 import type { LibrarySettings, MetadataSettings, StoreInfo } from "../bindings/github.com/playnux/core/app/models.js";
 
-import { applyUISettings, type UISettingsLike } from "./appearance";
+import { applyFontScale, DEFAULT_UI_SETTINGS, MAX_FONT_SCALE, MIN_FONT_SCALE, type UISettingsLike } from "./appearance";
 import { createBackgroundDownloads } from "./background-downloads";
 import { libraryPlugins, metadataPlugins } from "./plugins";
+import { button, setSettingState, type SettingsProperty } from "./plugins/settings";
+import { setupMetadataSettings } from "./plugins/metadata-settings";
+import { language, setLanguage, translateStatic, t } from "./i18n";
+import { storeLabel } from "./format";
 
 type MetadataPluginID = keyof typeof metadataPlugins;
-type Panel = "stores" | "library" | "plugins" | "emulation" | "appearance" | MetadataPluginID;
-
-interface EmulatorProfile {
-  profile_id: string;
-  emulator_id: string;
-  name: string;
-  platforms: string[];
-  extensions: string[];
-  executable?: string;
-  flatpak_id?: string;
-  args_template: string;
-  builtin?: boolean;
-}
-
-interface EmulatorDefinition {
-  id: string;
-  name: string;
-  executable?: string;
-  flatpak_id?: string;
-  profiles: EmulatorProfile[];
-  custom?: boolean;
-}
+type Panel = "stores" | "library" | "plugins" | "appearance" | MetadataPluginID;
 
 interface Options {
   stores: () => StoreInfo[];
   games: () => Game[];
   filteredGames: () => Game[];
   selected: () => Game | null;
-  configureFolders: (kind: "local" | "rom") => Promise<void>;
   addGame: () => void;
   reload: (discoverNew?: boolean) => Promise<void>;
   applyDownloads: (games: Game[]) => void;
   error: (error: unknown) => string;
+  recordGameError: (game: string, action: string, message: string) => void;
   report: (message: string, error?: boolean) => void;
   applyAppearance: (settings: UISettingsLike) => void;
   setViewMode: (mode: "details" | "grid") => void;
@@ -48,21 +30,12 @@ interface Options {
 
 function element<T extends HTMLElement>(id: string): T {
   const node = document.getElementById(id);
-  if (!node) throw new Error(`Elemento ausente: ${id}`);
+  if (!node) throw new Error(t("Missing element {0}", id));
   return node as T;
 }
 
-function button(label: string, action: () => void): HTMLButtonElement {
-  const control = document.createElement("button");
-  control.className = "ghost-button";
-  control.type = "button";
-  control.textContent = label;
-  control.addEventListener("click", action);
-  return control;
-}
-
 const metadataSources = {
-  store: "Loja oficial do jogo",
+  store: t("Official game store"),
   igdb: "IGDB",
   steamgriddb: "SteamGridDB",
 };
@@ -77,6 +50,19 @@ export function setupIntegrations(options: Options) {
   const storeProperties = element("integration-store-properties");
   const storeActions = element("integration-store-actions");
   const storeName = element("integration-store-name");
+  const storeSource = element("integration-store-source");
+  const storeState = element("integration-store-state");
+  const appearanceForm = element<HTMLFormElement>("appearance-form");
+  const appearanceScale = element<HTMLInputElement>("appearance-font-size");
+  const appearanceRange = element<HTMLInputElement>("appearance-font-range");
+  const appearanceLanguage = element<HTMLSelectElement>("appearance-language");
+  const appearanceStatus = element("appearance-status");
+  const appearanceSave = element<HTMLButtonElement>("appearance-save");
+  const syncLibraries = element<HTMLButtonElement>("sync-libraries");
+  let appearanceRequest = 0;
+  let savedFontScale = DEFAULT_UI_SETTINGS.font_scale;
+  let savedGPU = DEFAULT_UI_SETTINGS.gpu_acceleration;
+  let fontPreview = false;
   const storeList = element("integration-stores");
   const policyForm = element<HTMLFormElement>("metadata-policy");
   const sourceList = element("metadata-sources");
@@ -84,15 +70,21 @@ export function setupIntegrations(options: Options) {
   const storeConfig = element("integration-store-config");
   const providerList = element("integration-providers");
   const content = element("integration-content");
+  const providerStates = new Map<string, (settings: MetadataSettings) => void>();
   for (const [id, plugin] of Object.entries(metadataPlugins)) {
     content.insertAdjacentHTML("beforeend", plugin.view);
+    translateStatic(content.lastElementChild!);
+    providerStates.set(id, setupMetadataSettings(
+      content.lastElementChild as HTMLElement,
+      id as MetadataPluginID,
+      { status, run: (task) => operation(task), error: options.error, report: options.report },
+    ));
     const tab = button(plugin.name, () => showPanel(id as MetadataPluginID));
     tab.dataset.integrationTab = id;
     providerList.append(tab);
   }
   const panels = dialog.querySelectorAll<HTMLElement>("[data-integration-panel]");
   const tabs = dialog.querySelectorAll<HTMLButtonElement>("[data-integration-tab]");
-  let settings: MetadataSettings | null = null;
   let busy = false;
   let currentPanel: Panel = "stores";
   let activeStore = "";
@@ -100,36 +92,39 @@ export function setupIntegrations(options: Options) {
   let sourceOrder = [...defaultPriority];
   let activeSources = new Set<MetadataSource>(defaultPriority);
   let libraryPriority: string[] = [];
-  let emulationCatalog: EmulatorDefinition[] = [];
-  let emulationFolders: Record<string, string> = {};
   const downloads = createBackgroundDownloads(options.error);
 
   function showPanel(panel: Panel): void {
+    const enteringStores = panel === "stores" && (!dialog.open || currentPanel !== "stores");
+    if (currentPanel === "appearance" && panel !== currentPanel) restoreFontPreview();
     currentPanel = panel;
     status.textContent = "";
-    renderStores();
+    status.hidden = panel === "appearance";
+    appearanceStatus.hidden = appearanceSave.hidden = panel !== "appearance";
+    syncLibraries.hidden = panel !== "stores" && panel !== "library";
+    renderStores(enteringStores);
     panels.forEach((section) => { section.hidden = section.dataset.integrationPanel !== panel; });
     tabs.forEach((tab) => {
       if (tab.dataset.integrationTab === panel) tab.setAttribute("aria-current", "page");
       else tab.removeAttribute("aria-current");
     });
     dialog.querySelectorAll<HTMLButtonElement>("[data-integration-panel-link]").forEach((link) => {
-      link.toggleAttribute("aria-current", link.dataset.integrationPanelLink === panel);
+      if (link.dataset.integrationPanelLink === panel) link.setAttribute("aria-current", "page");
+      else link.removeAttribute("aria-current");
     });
     if (panel === "library") void renderLibrarySettings();
-    if (panel === "emulation") void renderEmulation();
     if (panel === "appearance") void renderAppearance();
   }
 
   function renderLibraryPriority(): void {
     const list = element("library-priority");
-    const names = new Map(options.stores().map((store) => [store.id, store.name]));
+    const names = new Map(options.stores().map((store) => [store.id, storeLabel(store)]));
     list.replaceChildren(...libraryPriority.map((id, index) => {
       const row = document.createElement("li");
       const label = document.createElement("span");
       label.textContent = names.get(id) ?? id;
       row.append(label);
-      for (const [step, symbol, description] of [[-1, "↑", "Subir"], [1, "↓", "Descer"]] as const) {
+      for (const [step, symbol, description] of [[-1, "↑", t("Move up")], [1, "↓", t("Move down")]] as const) {
         const target = index + step;
         const move = button(symbol, () => {
           [libraryPriority[index], libraryPriority[target]] = [libraryPriority[target], libraryPriority[index]];
@@ -149,7 +144,7 @@ export function setupIntegrations(options: Options) {
       const settings: LibrarySettings = await Host.GetLibrarySettings();
       element<HTMLInputElement>("library-unify").checked = settings.unify;
       const known = new Set(options.stores().map((store) => store.id));
-      libraryPriority = settings.priority.filter((id) => known.has(id));
+      libraryPriority = (settings.priority ?? []).filter((id) => known.has(id));
       for (const id of known) {
         if (!libraryPriority.includes(id)) libraryPriority.push(id);
       }
@@ -162,14 +157,14 @@ export function setupIntegrations(options: Options) {
 
   async function saveLibrarySettings(): Promise<void> {
     const statusLine = element("library-status");
-    statusLine.textContent = "Salvando…";
+    statusLine.textContent = t("Saving…");
     try {
       await Host.SaveLibrarySettings({
         unify: element<HTMLInputElement>("library-unify").checked,
         priority: libraryPriority,
       });
       await options.reload(false);
-      statusLine.textContent = "Preferências salvas.";
+      statusLine.textContent = t("Preferences saved.");
     } catch (error) {
       statusLine.textContent = options.error(error);
     }
@@ -177,31 +172,17 @@ export function setupIntegrations(options: Options) {
 
   async function clearLibrary(): Promise<void> {
     const statusLine = element("library-status");
-    if (!window.confirm("Limpar a biblioteca? Todos os jogos importados e as pastas locais serão apagados. As contas conectadas continuam salvas.")) {
+    if (!window.confirm(t("Clear the library? All imported games and local folders will be removed. Connected accounts keep their settings."))) {
       return;
     }
-    statusLine.textContent = "Limpando biblioteca…";
+    statusLine.textContent = t("Clearing library…");
     try {
       await Host.ClearLibrary();
       await options.reload(false);
       await renderLibrarySettings();
-      statusLine.textContent = "Biblioteca limpa.";
+      statusLine.textContent = t("Library cleared.");
     } catch (error) {
       statusLine.textContent = options.error(error);
-    }
-  }
-
-  function updateProviderStates(): void {
-    if (!settings) return;
-    for (const name of ["igdb", "steamgriddb"] as const) {
-      const label = dialog.querySelector(`[data-provider-state="${name}"]`);
-      if (label instanceof HTMLElement) {
-        const saved = settings.saved_keys?.[name];
-        label.textContent = saved ? "Chave cadastrada"
-          : settings[name] ? "Chave fornecida pelo ambiente" : "Chave não cadastrada";
-        label.classList.add("credential-status");
-        label.classList.toggle("is-configured", settings[name]);
-      }
     }
   }
 
@@ -218,7 +199,7 @@ export function setupIntegrations(options: Options) {
       });
       label.append(toggle, metadataSources[source]);
       row.append(label);
-      for (const [step, symbol, description] of [[-1, "↑", "Subir"], [1, "↓", "Descer"]] as const) {
+      for (const [step, symbol, description] of [[-1, "↑", t("Move up")], [1, "↓", t("Move down")]] as const) {
         const target = index + step;
         const move = button(symbol, () => {
           [sourceOrder[index], sourceOrder[target]] = [sourceOrder[target], sourceOrder[index]];
@@ -235,8 +216,7 @@ export function setupIntegrations(options: Options) {
     }));
   }
 
-  function renderPolicy(): void {
-    if (!settings) return;
+  function renderPolicy(settings: MetadataSettings): void {
     automatic.checked = settings.policy.automatic;
     const saved = (settings.policy.sources ?? []).filter((id): id is MetadataSource => defaultPriority.includes(id as MetadataSource));
     activeSources = new Set(saved);
@@ -246,265 +226,161 @@ export function setupIntegrations(options: Options) {
     renderSourceOrder();
   }
 
-  function profileLabel(definition: EmulatorDefinition, profile: EmulatorProfile): string {
-    return `${definition.name} — ${profile.name || profile.platforms.join(", ")}`;
-  }
-
-  function renderEmulationProfiles(): void {
-    const select = element<HTMLSelectElement>("emulation-profile");
-    const previous = select.value;
-    const options: HTMLOptionElement[] = [];
-    for (const definition of emulationCatalog) {
-      // Only list profiles for emulators that are actually installed and detected
-      if (!definition.executable && !definition.flatpak_id) continue;
-      for (const profile of definition.profiles ?? []) {
-        const available = Boolean(profile.executable || profile.flatpak_id);
-        if (!available) continue;
-        const option = new Option(profileLabel(definition, profile), profile.profile_id);
-        options.push(option);
-      }
-    }
-    if (!options.length) {
-      options.push(new Option("Nenhum emulador instalado detectado (adicione um abaixo)", ""));
-      options[0].disabled = true;
-    }
-    select.replaceChildren(...options);
-    if ([...select.options].some((option) => option.value === previous && !option.disabled)) {
-      select.value = previous;
+  function restoreFontPreview(): void {
+    appearanceRequest++;
+    if (fontPreview) {
+      applyFontScale(savedFontScale);
+      fontPreview = false;
     }
   }
 
-  async function renderEmulation(): Promise<void> {
-    const list = element("emulation-list");
-    const statusLine = element("emulation-status");
-    try {
-      const [catalog, folders] = await Promise.all([
-        Host.GetEmulators(),
-        Host.GetEmulationFolderProfiles(),
-      ]);
-      emulationCatalog = (catalog ?? []) as EmulatorDefinition[];
-      emulationFolders = Object.fromEntries(
-        Object.entries(folders ?? {}).filter((entry): entry is [string, string] => typeof entry[1] === "string"),
-      );
-      const cards = emulationCatalog.map((definition) => {
-        const card = document.createElement("article");
-        card.className = "emulation-card";
-        const heading = document.createElement("div");
-        heading.className = "emulation-card-head";
-        const name = document.createElement("strong");
-        name.textContent = definition.name;
-        const state = document.createElement("span");
-        state.className = `emulation-state ${definition.executable || definition.flatpak_id ? "is-detected" : "is-missing"}`;
-        state.textContent = definition.executable || definition.flatpak_id ? "detectado" : "não encontrado";
-        heading.append(name, state);
-        if (definition.custom) {
-          const badge = document.createElement("span");
-          badge.className = "emulation-badge";
-          badge.textContent = "manual";
-          heading.append(badge);
-          const remove = button("Remover", () => {
-            if (!window.confirm(`Remover o emulador ${definition.name}?`)) return;
-            void operation(async () => {
-              await Host.RemoveEmulator(definition.id);
-              await renderEmulation();
-              await options.reload(false);
-              statusLine.textContent = "Emulador removido.";
-            });
-          });
-          remove.classList.add("danger-button");
-          heading.append(remove);
-        }
-        card.append(heading);
-        const profileList = document.createElement("p");
-        profileList.className = "emulation-profiles";
-        profileList.textContent = (definition.profiles ?? []).slice(0, 4)
-          .map((profile) => `${profile.name} (${profile.extensions.join(", ")})`)
-          .join("  ·  ");
-        card.append(profileList);
-        return card;
-      });
-      if (!cards.length) {
-        const empty = document.createElement("p");
-        empty.className = "properties-note";
-        empty.textContent = "Nenhum emulador detectado. Adicione um manualmente abaixo.";
-        cards.push(empty);
-      }
-      const entries = Object.entries(emulationFolders);
-      if (entries.length) {
-        const foldersTitle = document.createElement("h4");
-        foldersTitle.textContent = "Pastas de ROMs configuradas";
-        cards.push(foldersTitle);
-        for (const [folder, profileID] of entries) {
-          const row = document.createElement("div");
-          row.className = "emulation-folder-row";
-          const copy = document.createElement("span");
-          const profile = emulationCatalog.flatMap((item) => item.profiles ?? []).find((item) => item.profile_id === profileID);
-          copy.textContent = `${folder} — ${profile?.name ?? profileID}`;
-          copy.title = folder;
-          const remove = button("Remover", () => void operation(async () => {
-            await Host.RemoveRomFolder(folder);
-            await renderEmulation();
-            await options.reload(false);
-          }));
-          remove.classList.add("danger-button");
-          row.append(copy, remove);
-          cards.push(row);
-        }
-      }
-      list.replaceChildren(...cards);
-      renderEmulationProfiles();
-      statusLine.textContent = "";
-    } catch (error) {
-      statusLine.textContent = options.error(error);
-    }
+  function previewFontScale(scale: number): void {
+    if (!Number.isInteger(scale) || scale < MIN_FONT_SCALE || scale > MAX_FONT_SCALE) return;
+    appearanceScale.value = appearanceRange.value = String(scale);
+    applyFontScale(scale);
+    fontPreview = scale !== savedFontScale;
   }
 
   async function renderAppearance(): Promise<void> {
-    const statusLine = element("appearance-status");
+    const request = ++appearanceRequest;
+    appearanceForm.inert = true;
+    appearanceSave.disabled = true;
+    appearanceStatus.textContent = t("Loading…");
     try {
       const settings = await Host.GetUISettings();
+      if (request !== appearanceRequest) return;
+      savedFontScale = applyFontScale(settings.font_scale);
+      savedGPU = settings.gpu_acceleration;
+      fontPreview = false;
+      appearanceScale.value = appearanceRange.value = String(savedFontScale);
+      appearanceLanguage.value = language;
       element<HTMLSelectElement>("appearance-theme").value = settings.theme;
-      element<HTMLSelectElement>("appearance-font-size").value = settings.font_size || "medium";
       element<HTMLSelectElement>("appearance-view").value = settings.view_mode;
-      element<HTMLInputElement>("appearance-transitions").checked = settings.transitions;
+      element<HTMLInputElement>("appearance-transitions").checked = !settings.transitions;
       element<HTMLInputElement>("appearance-gpu").checked = settings.gpu_acceleration;
       element<HTMLInputElement>("appearance-bg-trailer").checked = settings.background_trailer;
       element<HTMLInputElement>("appearance-bp-trailer").checked = settings.big_picture_trailer;
-      statusLine.textContent = "";
+      appearanceStatus.textContent = "";
+      appearanceSave.disabled = false;
     } catch (error) {
-      statusLine.textContent = options.error(error);
+      if (request === appearanceRequest) appearanceStatus.textContent = options.error(error);
+    } finally {
+      if (request === appearanceRequest) appearanceForm.inert = false;
     }
   }
 
   const localImport = (id: string) => libraryPlugins[id]?.importsInstalled === true;
 
-  async function operation(callback: () => Promise<void>, target = dialog): Promise<void> {
+  async function operation(
+    callback: () => Promise<void>,
+    target = dialog,
+    feedback = target === metadataDialog ? metadataStatus : status,
+  ): Promise<void> {
     if (busy) return;
     busy = true;
     const controls = Array.from(target.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLButtonElement>(
       "button:not(.desktop-close), input, select",
-    )).filter((control) => !control.disabled);
-    controls.forEach((control) => { control.disabled = true; });
+    )).filter((control) => !control.inert);
+    target.setAttribute("aria-busy", "true");
+    controls.forEach((control) => { control.inert = true; });
     try {
       await callback();
     } catch (error) {
-      (target === metadataDialog ? metadataStatus : status).textContent = options.error(error);
+      feedback.textContent = options.error(error);
     } finally {
       busy = false;
-      controls.forEach((control) => { control.disabled = false; });
+      target.removeAttribute("aria-busy");
+      controls.forEach((control) => { control.inert = false; });
     }
   }
 
-  function renderStores(): void {
+  function renderStores(remount = false): void {
     const stores = options.stores();
     const selected = stores.find((store) => store.id === activeStore) ?? stores[0];
     activeStore = selected?.id ?? "";
     storeList.replaceChildren(...stores.map((store) => {
-      const item = button(store.name, () => {
+      const name = document.createElement("span");
+      name.textContent = storeLabel(store);
+      const item = button(storeLabel(store), () => {
         activeStore = store.id;
         showPanel("stores");
       });
+      if (!libraryPlugins[store.id]?.local) {
+        const indicator = document.createElement("span");
+        indicator.className = "settings-nav-indicator";
+        indicator.dataset.connected = String(store.connected);
+        indicator.setAttribute("aria-hidden", "true");
+        item.replaceChildren(name, indicator);
+        item.title = store.connected ? t("Account connected") : t("Account not connected");
+      }
       if (currentPanel === "stores" && store.id === activeStore) item.setAttribute("aria-current", "page");
       return item;
     }));
-    storeName.textContent = selected?.name ?? "Bibliotecas";
+    storeName.textContent = selected ? storeLabel(selected) : t("Libraries");
     storeProperties.replaceChildren();
     storeActions.replaceChildren();
+    storeProperties.hidden = true;
+    storeState.hidden = false;
     if (!selected) {
+      setSettingState(storeState, t("No integration available"), "unavailable");
+      storeSource.textContent = "";
       storeConfig.replaceChildren();
       delete storeConfig.dataset.plugin;
       return;
     }
     const plugin = libraryPlugins[selected.id];
     const local = plugin?.local;
-    const properties = [
-      ["Estado", local ? "Fonte local" : selected.connected ? "Conta configurada" : "Conta não configurada"],
-      ["Origem", plugin?.source ?? "Biblioteca online"],
+    storeSource.textContent = plugin?.source ?? t("Online library");
+    setSettingState(storeState,
+      local ? t("Local source") : selected.connected ? t("Account connected") : t("Account not connected"),
+      local ? "local" : selected.connected ? "ready" : "pending",
+    );
+    const properties: SettingsProperty[] = [
+      ...(plugin?.properties?.(selected) ?? []),
+      ...(selected.clients ?? []).map((client): SettingsProperty => ({
+        label: client.name,
+        value: client.installed ? t("Detected") : t("Not installed"),
+        state: client.installed ? "ready" : "unavailable",
+      })),
     ];
-    if (selected.id === "steam") {
-      properties.push(["Chave da Steam Web API", selected.api_key_saved ? "Cadastrada" : "Não cadastrada"]);
-    }
-    if (selected.clients?.length) {
-      properties.push([
-        selected.clients.length > 1 ? "Clientes possíveis" : "Cliente externo",
-        selected.clients.map((client) => `${client.name} · ${client.installed ? "detectado" : "não detectado"}`).join(" / "),
-      ]);
-    }
-    for (const [label, value] of properties) {
+    for (const property of properties) {
+      const row = document.createElement("div");
       const term = document.createElement("dt");
       const definition = document.createElement("dd");
-      term.textContent = label;
-      definition.textContent = value;
-      storeProperties.append(term, definition);
+      term.textContent = property.label;
+      if (property.state) setSettingState(definition, property.value, property.state);
+      else definition.textContent = property.value;
+      row.append(term, definition);
+      storeProperties.append(row);
     }
-    if (selected.connected) storeActions.append(button("Atualizar biblioteca", () => queueLibrarySync([selected])));
-    if (localImport(selected.id)) storeActions.append(button("Importar instalados", () => queueLibrarySync([selected], true)));
-    if (storeConfig.dataset.plugin !== selected.id) {
+    storeProperties.hidden = !properties.length;
+    if (selected.connected) storeActions.append(button(t("Sync library"), () => queueLibrarySync([selected])));
+    if (localImport(selected.id)) storeActions.append(button(t("Import installed games"), () => queueLibrarySync([selected], true)));
+    if (currentPanel === "stores" && (remount || storeConfig.dataset.plugin !== selected.id)) {
       storeConfig.dataset.plugin = selected.id;
       storeConfig.innerHTML = plugin?.view ?? "";
-      bindStoreSettings(selected);
+      translateStatic(storeConfig);
+      plugin?.setup?.(storeConfig, {
+        store: selected,
+        status,
+        run: (task, feedback) => operation(task, dialog, feedback),
+        reload: options.reload,
+        sync: () => queueLibrarySync([{ ...selected, connected: true }]),
+        error: options.error,
+        report: options.report,
+      });
     }
-  }
-
-  function bindStoreSettings(store: StoreInfo): void {
-    storeConfig.querySelector("[data-store-login]")?.addEventListener("click", () => void operation(async () => {
-      status.textContent = `Conectando a ${store.name}…`;
-      const games = await Host.LoginStore(store.id);
-      await options.reload(true);
-      status.textContent = `${store.name} conectada. ${games?.length ?? 0} jogos recebidos.`;
-    }));
-
-    const account = storeConfig.querySelector<HTMLFormElement>("[data-steam-account]");
-    const steamID = storeConfig.querySelector<HTMLInputElement>("#steam-id");
-    const detectSteam = storeConfig.querySelector<HTMLButtonElement>("[data-steam-detect]");
-    if (steamID && !steamID.value) {
-      void Host.DetectSteamID().then((id) => {
-        if (id && !steamID.value) steamID.value = id;
-      }).catch(() => undefined);
-    }
-    detectSteam?.addEventListener("click", () => {
-      detectSteam.disabled = true;
-      void Host.DetectSteamID().then((id) => {
-        if (steamID) steamID.value = id;
-        status.textContent = `SteamID64 encontrado neste PC: ${id}`;
-      }).catch((error) => {
-        status.textContent = options.error(error);
-      }).finally(() => {
-        detectSteam.disabled = false;
-      });
-    });
-    account?.addEventListener("submit", (event) => {
-      event.preventDefault();
-      const data = new FormData(account);
-      void operation(async () => {
-        const key = String(data.get("key") ?? "").trim();
-        const clearKey = data.has("clearKey");
-        await Host.ConfigureSteam(String(data.get("account") ?? ""), key, clearKey);
-        account.reset();
-        if (store.id === "steam" && !key && !clearKey) {
-          options.report("SteamID salvo: instalados importados. Informe uma chave da Steam Web API para carregar os comprados não instalados.");
-        }
-        queueLibrarySync([{ ...store, connected: true }]);
-      });
-    });
-    const folders = storeConfig.querySelector<HTMLButtonElement>("[data-plugin-folders]");
-    folders?.addEventListener("click", () => {
-      const kind = folders.dataset.pluginFolders === "rom" ? "rom" : "local";
-      void options.configureFolders(kind).catch((error) => {
-        status.textContent = options.error(error);
-      });
-    });
   }
 
   function queueLibrarySync(stores: StoreInfo[], installedOnly = false): void {
     const available = stores.filter((store) => store.connected || localImport(store.id));
     if (!available.length) {
-      status.textContent = "Nenhuma biblioteca disponível para atualizar.";
+      status.textContent = t("No library available to sync.");
       return;
     }
     dialog.close();
     downloads.enqueue(
-      "Bibliotecas",
+      t("Libraries"),
       available,
       async (store) => {
         try {
@@ -514,7 +390,7 @@ export function setupIntegrations(options: Options) {
             await Host.SyncStore(store.id);
           }
         } catch (error) {
-          throw new Error(`${store.name}: ${options.error(error)}`, { cause: error });
+          throw new Error(`${storeLabel(store)}: ${options.error(error)}`, { cause: error });
         }
       },
       () => options.reload(true),
@@ -535,8 +411,8 @@ export function setupIntegrations(options: Options) {
 
   async function refreshProviders(): Promise<void> {
     try {
-      settings = await Host.GetMetadataSettings();
-      updateProviderStates();
+      const settings = await Host.GetMetadataSettings();
+      for (const update of providerStates.values()) update(settings);
     } catch (error) {
       status.textContent = options.error(error);
     }
@@ -550,11 +426,10 @@ export function setupIntegrations(options: Options) {
     selection.checked = !!game;
     if (!game) policyForm.querySelector<HTMLInputElement>('[value="all"]')!.checked = true;
     sourceList.replaceChildren();
-    metadataStatus.textContent = "Carregando configurações…";
+    metadataStatus.textContent = t("Loading settings…");
     metadataDialog.showModal();
     void operation(async () => {
-      settings = await Host.GetMetadataSettings();
-      renderPolicy();
+      renderPolicy(await Host.GetMetadataSettings());
       metadataStatus.textContent = "";
     }, metadataDialog);
   }
@@ -567,10 +442,18 @@ export function setupIntegrations(options: Options) {
   }
 
   function enqueueMetadata(ids: string[], policy: MetadataSettings["policy"]): void {
+    const names = new Map(options.games().map((game) => [game.id, game.name]));
     downloads.enqueue(
-      "Metadados",
+      t("Metadata"),
       [...new Set(ids)],
-      (id) => Host.DownloadGameMetadata(id, policy.sources, policy.mode),
+      async (id) => {
+        try {
+          return await Host.DownloadGameMetadata(id, policy.sources, policy.mode);
+        } catch (error) {
+          options.recordGameError(names.get(id) || t("Library game"), t("Metadata"), options.error(error));
+          throw error;
+        }
+      },
       (games) => options.applyDownloads(games.filter((game): game is Game => game !== null)),
     );
   }
@@ -589,100 +472,50 @@ export function setupIntegrations(options: Options) {
   });
   element("library-clear").addEventListener("click", () => void clearLibrary());
 
-  element<HTMLButtonElement>("emulation-scan").addEventListener("click", () => void operation(async () => {
-    const statusLine = element("emulation-status");
-    const folder = element<HTMLInputElement>("emulation-folder").value.trim();
-    const profileID = element<HTMLSelectElement>("emulation-profile").value;
-    if (!folder) {
-      statusLine.textContent = "Informe a pasta de ROMs.";
-      return;
-    }
-    if (!profileID) {
-      statusLine.textContent = "Escolha um perfil de emulador.";
-      return;
-    }
-    statusLine.textContent = "Escaneando ROMs…";
-    const games = await Host.AddEmulationFolder(folder, profileID);
-    await renderEmulation();
-    await options.reload(false);
-    statusLine.textContent = `${games?.length ?? 0} ROMs importadas desta pasta.`;
-  }));
-
-  element<HTMLFormElement>("emulator-form").addEventListener("submit", (event) => {
+  appearanceScale.addEventListener("input", () => previewFontScale(appearanceScale.valueAsNumber));
+  appearanceRange.addEventListener("input", () => previewFontScale(appearanceRange.valueAsNumber));
+  element("appearance-font-reset").addEventListener("click", () => previewFontScale(DEFAULT_UI_SETTINGS.font_scale));
+  appearanceForm.addEventListener("submit", (event) => {
     event.preventDefault();
     void operation(async () => {
-      const statusLine = element("emulator-status");
-      const name = element<HTMLInputElement>("emulator-name").value.trim();
-      const executable = element<HTMLInputElement>("emulator-executable").value.trim();
-      const flatpakID = element<HTMLInputElement>("emulator-flatpak").value.trim();
-      const profileName = element<HTMLInputElement>("emulator-profile-name").value.trim();
-      const platform = element<HTMLInputElement>("emulator-platform").value.trim();
-      const extensions = element<HTMLInputElement>("emulator-extensions").value.split(/[\s,;]+/).filter(Boolean);
-      const argsTemplate = element<HTMLInputElement>("emulator-args").value.trim() || `"{ImagePath}"`;
-      if (!name || !profileName || !platform || !extensions.length) {
-        statusLine.textContent = "Preencha nome, perfil, plataforma e extensões.";
+      const settings: UISettingsLike = {
+        theme: element<HTMLSelectElement>("appearance-theme").value,
+        font_scale: appearanceScale.valueAsNumber,
+        view_mode: element<HTMLSelectElement>("appearance-view").value,
+        transitions: !element<HTMLInputElement>("appearance-transitions").checked,
+        gpu_acceleration: element<HTMLInputElement>("appearance-gpu").checked,
+        background_trailer: element<HTMLInputElement>("appearance-bg-trailer").checked,
+        big_picture_trailer: element<HTMLInputElement>("appearance-bp-trailer").checked,
+      };
+      appearanceStatus.textContent = t("Saving…");
+      await Host.SaveUISettings(settings);
+      if (appearanceLanguage.value !== language) {
+        await Host.SetInterfaceLanguage(appearanceLanguage.value);
+        setLanguage(appearanceLanguage.value);
+        location.reload();
         return;
       }
-      if (!executable && !flatpakID) {
-        statusLine.textContent = "Informe o executável ou o Flatpak ID.";
-        return;
-      }
-      const id = name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
-        .replace(/[^a-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "") || "custom-emulator";
-      await Host.SaveEmulator({
-        id,
-        name,
-        executable,
-        flatpak_id: flatpakID,
-        profiles: [{
-          profile_id: `${id}:default`,
-          emulator_id: id,
-          name: profileName,
-          platforms: [platform],
-          extensions,
-          executable,
-          flatpak_id: flatpakID,
-          args_template: argsTemplate,
-          folder_aliases: [],
-          priority: 100,
-          builtin: false,
-        }],
-      });
-      element<HTMLFormElement>("emulator-form").reset();
-      element<HTMLInputElement>("emulator-args").value = `"{ImagePath}"`;
-      await renderEmulation();
-      statusLine.textContent = "Emulador salvo. Escolha um perfil e escaneie uma pasta.";
-    });
+      const changedGPU = savedGPU !== settings.gpu_acceleration;
+      savedGPU = settings.gpu_acceleration;
+      savedFontScale = settings.font_scale;
+      fontPreview = false;
+      options.applyAppearance(settings);
+      options.setViewMode(settings.view_mode === "grid" ? "grid" : "details");
+      appearanceStatus.textContent = changedGPU
+        ? t("Appearance saved. Restart Playnux to apply the GPU setting.")
+        : t("Appearance saved.");
+    }, dialog, appearanceStatus);
   });
 
-  element<HTMLButtonElement>("appearance-save").addEventListener("click", () => void operation(async () => {
-    const statusLine = element("appearance-status");
-    const settings: UISettingsLike = {
-      theme: element<HTMLSelectElement>("appearance-theme").value,
-      font_size: element<HTMLSelectElement>("appearance-font-size").value,
-      view_mode: element<HTMLSelectElement>("appearance-view").value,
-      transitions: element<HTMLInputElement>("appearance-transitions").checked,
-      gpu_acceleration: element<HTMLInputElement>("appearance-gpu").checked,
-      background_trailer: element<HTMLInputElement>("appearance-bg-trailer").checked,
-      big_picture_trailer: element<HTMLInputElement>("appearance-bp-trailer").checked,
-    };
-    statusLine.textContent = "Salvando…";
-    await Host.SaveUISettings(settings);
-    options.applyAppearance(applyUISettings(settings));
-    options.setViewMode(settings.view_mode === "grid" ? "grid" : "details");
-    statusLine.textContent = settings.gpu_acceleration
-      ? "Aparência salva. A aceleração de GPU já está ativa."
-      : "Aparência salva. A GPU será desativada ao reiniciar o Playnux.";
-  }));
-
+  dialog.addEventListener("close", restoreFontPreview);
   element("integrations-close").addEventListener("click", () => dialog.close());
   element("integrations-done").addEventListener("click", () => dialog.close());
   element("metadata-close").addEventListener("click", () => metadataDialog.close());
   element("metadata-done").addEventListener("click", () => metadataDialog.close());
-  element("sync-libraries").addEventListener("click", () => queueLibrarySync(options.stores()));
+  syncLibraries.addEventListener("click", () => queueLibrarySync(options.stores()));
   element("metadata-save").addEventListener("click", () => void operation(async () => {
     await savePolicy();
-    metadataStatus.textContent = "Padrão de metadados salvo.";
+    metadataStatus.textContent = t("Metadata defaults saved.");
   }, metadataDialog));
   policyForm.addEventListener("submit", (event) => {
     event.preventDefault();
@@ -690,7 +523,7 @@ export function setupIntegrations(options: Options) {
     const games = scope === "selected" ? (metadataGame ? [metadataGame] : [])
       : scope === "filtered" ? options.filteredGames() : options.games();
     if (!games.length) {
-      metadataStatus.textContent = "Nenhum jogo selecionado.";
+      metadataStatus.textContent = t("No game selected.");
       return;
     }
     void operation(async () => {
@@ -699,30 +532,6 @@ export function setupIntegrations(options: Options) {
       enqueueMetadata(games.map((game) => game.id), policy);
     }, metadataDialog);
   });
-
-  for (const help of dialog.querySelectorAll<HTMLButtonElement>("[data-help-url]")) {
-    help.addEventListener("click", () => {
-      const url = help.dataset.helpUrl;
-      if (url) void Browser.OpenURL(url).catch((error) => {
-        status.textContent = options.error(error);
-      });
-    });
-  }
-
-  for (const form of dialog.querySelectorAll<HTMLFormElement>("[data-provider]")) {
-    const update = (clear: boolean) => {
-      const data = new FormData(form);
-      void operation(async () => {
-        await Host.SetMetadataCredentials(form.dataset.provider ?? "", clear ? "" : String(data.get("client") ?? ""), clear ? "" : String(data.get("key") ?? ""));
-        form.reset();
-        settings = await Host.GetMetadataSettings();
-        updateProviderStates();
-        status.textContent = clear ? "Credenciais salvas removidas." : "Credenciais salvas.";
-      });
-    };
-    form.addEventListener("submit", (event) => { event.preventDefault(); update(false); });
-    form.querySelector("[data-clear-provider]")?.addEventListener("click", () => update(true));
-  }
 
   return {
     open,

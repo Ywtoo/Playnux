@@ -1,5 +1,15 @@
-<fieldset class="desktop-group">
-  <legend>Pastas de jogos</legend>
-  <p>Além dos atalhos Linux e Flatpak, o Playnux pode buscar jogos em pastas escolhidas por você.</p>
-  <button type="button" class="ghost-button" data-plugin-folders="local">Configurar pastas…</button>
-</fieldset>
+<form>
+  <fieldset class="desktop-group">
+    <legend>Game folders</legend>
+    <p>Playnux scans for Linux executables and .sh scripts. Each subfolder can become a game.</p>
+    <label for="linux-folder">Folder</label>
+    <div class="path-row">
+      <input id="linux-folder" type="text" placeholder="~/Games" autocomplete="off" spellcheck="false" required>
+      <button type="button" class="ghost-button" data-browse>Browse…</button>
+    </div>
+    <div class="desktop-actions">
+      <button type="submit" class="primary-button">Add and scan</button>
+    </div>
+    <div class="folder-list" aria-live="polite"></div>
+  </fieldset>
+</form>

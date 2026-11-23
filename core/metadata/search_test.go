@@ -2,6 +2,7 @@ package metadata
 
 import (
 	"net/netip"
+	"net/url"
 	"testing"
 )
 
@@ -12,6 +13,21 @@ func TestParseGoogleImages(t *testing.T) {
 	results := ParseGoogleImages(page)
 	if len(results) != 2 || results[0].Width != 600 || results[0].Height != 900 || results[0].URL != "https://example.com/cover.jpg?x=1&y=2" || results[1].Width != 32 {
 		t.Fatalf("resultados: %+v", results)
+	}
+}
+
+func TestGoogleImageSearchURLUsesImageModeAndTransparency(t *testing.T) {
+	raw, err := GoogleImageSearchURL("  Hollow Knight logotipo  ", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	search, err := url.Parse(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	params := search.Query()
+	if search.Hostname() != "www.google.com" || params.Get("udm") != "2" || params.Get("q") != "Hollow Knight logotipo" || params.Get("tbs") != "ic:trans" {
+		t.Fatalf("busca incorreta: %s", raw)
 	}
 }
 

@@ -98,7 +98,7 @@ Categories=Game;
 			}
 		}
 		if game.Name == "Flatpak Game" {
-			if game.Source != "Flatpak" || game.GameID != "org.example.Game" {
+			if game.Source != "Flatpak" || game.GameID != "org.example.Game" || !game.IsInstalled {
 				t.Fatalf("flatpak = %+v", game)
 			}
 			command, args, err := provider.LaunchCommand(game)

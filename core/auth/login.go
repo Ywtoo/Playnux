@@ -1,9 +1,5 @@
-// Package auth orquestra o login por WebView das lojas (estilo Playnite).
-//
-// A camada Wails implementa WebView: abre a URL da loja, escuta os cookies e o
-// redirect de sucesso, fecha a janela e devolve o resultado. O Core troca o
-// código de autorização por tokens (Epic/GOG) ou extrai a sessão dos cookies
-// (Steam), cifra a sessão no SQLite e dispara a sincronização da biblioteca.
+// Package auth connects store sign-in to encrypted sessions and library sync.
+// Store providers authenticate through the embedded WebView bridge.
 package auth
 
 import (
@@ -88,6 +84,11 @@ func (m *Manager) Login(ctx context.Context, pluginID string) (*models.Session, 
 	if err != nil {
 		return nil, nil, err
 	}
+	return m.saveLogin(ctx, provider, auth)
+}
+
+func (m *Manager) saveLogin(ctx context.Context, provider store.StoreProvider, auth store.StoreAuth) (*models.Session, []*models.Game, error) {
+	pluginID := provider.ID()
 	if err := provider.Authenticate(ctx, auth); err != nil {
 		return nil, nil, fmt.Errorf("credenciais de %s inválidas: %w", provider.Name(), err)
 	}

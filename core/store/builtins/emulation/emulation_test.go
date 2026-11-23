@@ -165,3 +165,26 @@ func TestLaunchCommandReportsMissingEmulator(t *testing.T) {
 		t.Fatal("expected an error for an invalid game")
 	}
 }
+
+func TestScanCatalogRespectsProfileOnNestedFolder(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "ps2")
+	manual := filepath.Join(root, "coleção")
+	writeROM(t, filepath.Join(root, "PS2 Game.iso"))
+	writeROM(t, filepath.Join(manual, "Manual Game.iso"))
+	writeROM(t, filepath.Join(manual, "Different Extension.chd"))
+
+	catalog := Catalog(
+		map[string]Emulator{"pcsx2": {ID: "pcsx2", Name: "PCSX2", Binary: "pcsx2"}},
+		[]EmulatorDefinition{{
+			ID: "manual", Name: "Manual", Executable: "/usr/bin/manual",
+			Profiles: []EmulatorProfile{{ProfileID: "manual:iso", Extensions: []string{"iso"}}},
+		}},
+	)
+	games := scanCatalog([]string{root, manual}, map[string]string{manual: "manual:iso"}, catalog)
+	if len(games) != 2 || games[0].Executable != "/usr/bin/manual" || games[1].Executable != "pcsx2" {
+		for _, game := range games {
+			t.Logf("%s: %s", game.Name, game.Executable)
+		}
+		t.Fatalf("esperava dois jogos com os perfis das respectivas pastas, obtive %d", len(games))
+	}
+}

@@ -89,7 +89,7 @@ func TestFetchLibrarySyncsOwnedGamesAndLocalInstall(t *testing.T) {
 				t.Errorf("authorization = %q", r.Header.Get("Authorization"))
 			}
 			_ = json.NewEncoder(w).Encode(map[string]any{
-				"owned": []int64{1207658691, 999},
+				"owned": []int64{1207658691, 998, 999},
 			})
 
 		case r.URL.Path == "/account/gameDetails/1207658691.json":
@@ -106,6 +106,12 @@ func TestFetchLibrarySyncsOwnedGamesAndLocalInstall(t *testing.T) {
 		case r.URL.Path == "/account/gameDetails/999.json":
 			http.Error(w, "falha simulada", http.StatusInternalServerError)
 
+		case r.URL.Path == "/account/gameDetails/998.json":
+			_, _ = w.Write([]byte(`{"title":"Conteúdo extra com título normal"}`))
+		case r.URL.Path == "/products/998":
+			_, _ = w.Write([]byte(`{"title":"Conteúdo extra com título normal","game_type":"dlc"}`))
+		case r.URL.Path == "/products/999":
+			_, _ = w.Write([]byte(`{"title":"Nome do catálogo","productType":"GAME"}`))
 		default:
 			http.NotFound(w, r)
 		}
@@ -122,6 +128,7 @@ func TestFetchLibrarySyncsOwnedGamesAndLocalInstall(t *testing.T) {
 	provider.client = server.Client()
 	provider.authBase = server.URL
 	provider.embedBase = server.URL
+	provider.productBase = server.URL
 
 	ctx := context.Background()
 	auth, err := provider.ExchangeCode(ctx, "gog-code")
@@ -169,7 +176,7 @@ func TestFetchLibrarySyncsOwnedGamesAndLocalInstall(t *testing.T) {
 	}
 
 	fallback := games[byID["999"]]
-	if fallback.Name != "999" || fallback.IsInstalled {
+	if fallback.Name != "Nome do catálogo" || fallback.IsInstalled {
 		t.Fatalf("jogo sem detalhes deveria ter entrada mínima: %+v", fallback)
 	}
 

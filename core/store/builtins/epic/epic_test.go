@@ -75,12 +75,9 @@ func TestExchangeCode(t *testing.T) {
 		t.Fatal("provider deveria estar autenticado")
 	}
 
-	spec := provider.WebLogin()
-	if !strings.Contains(spec.URL, epicClientID) {
-		t.Fatalf("URL de login sem client id: %s", spec.URL)
-	}
-	if spec.RedirectURLPrefix == "" || len(spec.CookieNames) == 0 {
-		t.Fatalf("spec de login incompleta: %+v", spec)
+	loginURL := provider.WebLogin().URL
+	if !strings.Contains(loginURL, epicClientID) {
+		t.Fatalf("URL de login sem client id: %s", loginURL)
 	}
 }
 
@@ -161,7 +158,12 @@ func TestFetchLibraryMergesCloudAndLocal(t *testing.T) {
 		atomic.AddInt32(&pageCalls, 1)
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"records": []map[string]any{
-				{"appName": "ThirdGame", "productName": "Third Game"},
+				{"appName": "aabbccddeeff00112233445566778899", "title": "Third Game"},
+				{"appName": "aa00112233445566778899aabbccddff"},
+				{"catalogItemId": "entitlement-without-app", "title": "Build Interno"},
+				{"appName": "MarketplaceProduct", "namespace": "ue", "title": "Marketplace"},
+				{"appName": "AlphaPrivate", "sandboxType": "PRIVATE", "title": "Jogo Teste"},
+				{"appName": "ExtraMap", "title": "Mapa extra", "categories": []map[string]string{{"path": "mods"}}},
 			},
 			"responseMetadata": map[string]any{},
 		})

@@ -19,13 +19,21 @@ import {
 } from "./format";
 import { setupGameProperties } from "./game-properties";
 import { renderGameInformation } from "./game-information";
-import { trailerEmbedURL } from "./media";
+import { backgroundTrailer } from "./media";
+import { sampleBackdrop, setArtworkImage } from "./artwork-images";
+import { setupNotifications } from "./notifications";
+import { configureDetailsSidebar, configureGridCards } from "./library-layout";
+import { language, translateStatic, t } from "./i18n";
+import { setupUpdates } from "./updates";
+
+document.documentElement.lang = language;
+translateStatic(document.body);
 
 const FILTER_TITLES: Record<string, string> = {
-  all: "Todos os jogos",
-  installed: "Instalados",
-  favorites: "Favoritos",
-  recent: "Recentes",
+  all: t("All games"),
+  installed: t("Installed"),
+  favorites: t("Favorites"),
+  recent: t("Recent"),
 };
 
 type ViewMode = "details" | "grid";
@@ -34,16 +42,26 @@ type EmptyMode = "refresh" | "clear" | "all" | "login" | "manual";
 function element<T extends HTMLElement>(id: string): T {
   const found = document.getElementById(id);
   if (!found) {
-    throw new Error(`elemento #${id} não encontrado`);
+    throw new Error(t("element #{0} is missing", id));
   }
   return found as T;
 }
+
+const recordGameError = setupNotifications(
+  element<HTMLDialogElement>("notifications-dialog"),
+  element<HTMLButtonElement>("notifications-open"),
+  element("notifications-count"),
+  element("notifications-list"),
+  element<HTMLButtonElement>("notifications-clear"),
+  element<HTMLButtonElement>("notifications-close"),
+);
 
 const searchInput = element<HTMLInputElement>("search");
 const bigPictureButton = element<HTMLButtonElement>("big-picture-open");
 const viewModeButtons = Array.from(document.querySelectorAll<HTMLButtonElement>(".view-mode"));
 
 const detailsView = element<HTMLElement>("details-view");
+const sidebarToggle = element<HTMLButtonElement>("details-sidebar-toggle");
 const gridView = element<HTMLElement>("grid-view");
 const detailsList = element<HTMLElement>("details-list");
 const detailsCount = element<HTMLElement>("details-count");
@@ -54,7 +72,7 @@ const detailsBg = element<HTMLImageElement>("details-bg");
 const detailsLogo = element<HTMLImageElement>("details-logo");
 const detailsTitle = element<HTMLElement>("details-title");
 const detailsPlay = element<HTMLButtonElement>("details-play");
-const detailsHeroVideo = element<HTMLElement>("details-hero-video");
+const detailsTrailer = backgroundTrailer(element("details-hero-video"), element<HTMLButtonElement>("details-trailer-sound"));
 const detailsDescription = element<HTMLElement>("details-description");
 const detailsFacts = element<HTMLElement>("details-facts");
 const detailsCompatibility = element<HTMLElement>("details-compatibility");
@@ -80,19 +98,9 @@ const drawerPlay = element<HTMLButtonElement>("drawer-play");
 const drawerInstalled = element<HTMLElement>("drawer-installed");
 const drawerDescription = element<HTMLElement>("drawer-description");
 const drawerFacts = element<HTMLElement>("drawer-facts");
-const drawerTrailer = element<HTMLElement>("drawer-trailer");
-const drawerTrailerPlay = element<HTMLButtonElement>("drawer-trailer-play");
-const drawerTrailerPlayer = element<HTMLElement>("drawer-trailer-player");
+const drawerTrailer = backgroundTrailer(element("drawer-trailer-background"), element<HTMLButtonElement>("drawer-trailer-sound"));
 const drawerCompatibility = element<HTMLElement>("drawer-compatibility");
 
-const folderDialog = element<HTMLDialogElement>("folder-dialog");
-const folderForm = element<HTMLFormElement>("folder-form");
-const folderTitle = element<HTMLElement>("folder-title");
-const folderHint = element<HTMLElement>("folder-hint");
-const folderPath = element<HTMLInputElement>("folder-path");
-const folderList = element<HTMLElement>("folder-list");
-const folderCancel = element<HTMLButtonElement>("folder-cancel");
-const folderSubmit = element<HTMLButtonElement>("folder-submit");
 
 const manualDialog = element<HTMLDialogElement>("manual-dialog");
 const manualForm = element<HTMLFormElement>("manual-form");
@@ -123,8 +131,6 @@ let detailsGame: Game | null = null;
 let emptyMode: EmptyMode = "refresh";
 let emptyStoreID = "";
 let launching = false;
-let folderKind: "local" | "rom" = "local";
-let folderBusy = false;
 let manualBusy = false;
 let localApps: LocalApp[] = [];
 let selectedApps = new Set<string>();
@@ -145,7 +151,9 @@ let uiSettings: UISettingsLike = { ...DEFAULT_UI_SETTINGS, view_mode: viewMode }
 
 const bigPicture = createBigPicture({
   root: bigPictureRoot,
-  onError: (error) => showToast(`Não foi possível restaurar a janela. ${messageOf(error)}`, true),
+  trailersEnabled: () => uiSettings.big_picture_trailer,
+  onExit: refreshBackgroundTrailers,
+  onError: (error) => showToast(t("Could not restore the window. {0}", messageOf(error)), true),
   onLaunch: (game) => {
     void launchGame(game, "big");
   },
@@ -170,7 +178,7 @@ function messageOf(error: unknown): string {
     message = String((error as { message: unknown }).message);
   }
   const cleaned = message.replace(/^(RuntimeError|Error):\s*/i, "").trim();
-  return cleaned || "Não foi possível concluir a operação.";
+  return cleaned || t("Could not complete the operation.");
 }
 
 function showToast(message: string, isError = false): void {
@@ -210,7 +218,7 @@ function updateCounts(): void {
 }
 
 function updateSectionTitle(): void {
-  const title = searchQuery.trim() ? "Resultados da busca" : FILTER_TITLES[activeFilter] || "Biblioteca";
+  const title = searchQuery.trim() ? t("Search results") : FILTER_TITLES[activeFilter] || t("Library");
   const origin = sourceFilter.value ? sourceFilter.selectedOptions[0]?.label : "";
   sectionTitle.textContent = origin ? `${title} · ${origin}` : title;
 }
@@ -231,31 +239,31 @@ function updateEmpty(games: Game[]): void {
   empty.hidden = false;
   if (searchQuery.trim()) {
     emptyMode = "clear";
-    emptyTitle.textContent = "Nada encontrado";
-    emptyText.textContent = `Nenhum jogo corresponde a “${searchQuery.trim()}”. Tente outro termo.`;
-    emptyAction.textContent = "Limpar busca";
+    emptyTitle.textContent = t("Nothing found");
+    emptyText.textContent = t("No game matches “{0}”. Try another search.", searchQuery.trim());
+    emptyAction.textContent = t("Clear search");
     return;
   }
   if (activeFilter !== "all" || sourceFilter.value) {
     emptyMode = "all";
-    emptyTitle.textContent = "Nenhum jogo nesta categoria";
-    emptyText.textContent = "Sua biblioteca não tem jogos com esse filtro. Veja a biblioteca completa ou adicione um jogo.";
-    emptyAction.textContent = "Ver todos os jogos";
+    emptyTitle.textContent = t("No games in this category");
+    emptyText.textContent = t("No games match this filter. View the entire library or add a game.");
+    emptyAction.textContent = t("View all games");
     return;
   }
   const disconnected = stores.find((store) => !store.connected && store.id !== "xbox");
   if (disconnected && allGames.length === 0) {
     emptyMode = "login";
     emptyStoreID = disconnected.id;
-    emptyTitle.textContent = "Conecte sua primeira loja";
-    emptyText.textContent = `Entre na ${disconnected.name} ou importe os jogos instalados sem senha.`;
-    emptyAction.textContent = `Conectar ${disconnected.name}`;
+    emptyTitle.textContent = t("Connect your first store");
+    emptyText.textContent = t("Sign in to {0} or import installed games without signing in.", disconnected.name);
+    emptyAction.textContent = t("Connect {0}", disconnected.name);
     return;
   }
   emptyMode = "manual";
-  emptyTitle.textContent = "Sua biblioteca está vazia";
-  emptyText.textContent = "Adicione um executável, escaneie uma pasta ou conecte uma loja.";
-  emptyAction.textContent = "＋ Adicionar jogo";
+  emptyTitle.textContent = t("Your library is empty");
+  emptyText.textContent = t("Add an executable, scan a folder, or connect a store.");
+  emptyAction.textContent = t("＋ Add game");
 }
 
 function setLoading(value: boolean): void {
@@ -268,6 +276,7 @@ function setLoading(value: boolean): void {
 
 function renderView(): void {
   const isDetails = viewMode === "details";
+  sidebarToggle.hidden = !isDetails;
   detailsView.hidden = !isDetails;
   gridView.hidden = isDetails;
   for (const button of viewModeButtons) {
@@ -275,6 +284,7 @@ function renderView(): void {
     button.classList.toggle("is-active", active);
     button.setAttribute("aria-pressed", String(active));
   }
+  if (!isDetails) detailsTrailer.stop();
   if (!isDetails && gridDirty) {
     renderGrid();
   }
@@ -286,26 +296,49 @@ function renderView(): void {
   }
 }
 
+const gridCards = new Map<string, PlaynuxGameCardElement>();
+
 function renderGrid(): void {
-  const cards: PlaynuxGameCardElement[] = [];
-  for (const game of visibleGames) {
-    const card = document.createElement("playnux-game-card") as unknown as PlaynuxGameCardElement;
-    card.game = game;
-    cards.push(card);
+  if (!gridDirty) return;
+  const next = new Set(visibleGames.map((game) => game.id));
+  for (const [id, card] of gridCards) {
+    if (!next.has(id)) {
+      card.remove();
+      gridCards.delete(id);
+    }
   }
-  gameGrid.replaceChildren(...cards);
+  let anchor = gameGrid.firstElementChild;
+  for (const game of visibleGames) {
+    let card = gridCards.get(game.id);
+    if (!card) {
+      card = document.createElement("playnux-game-card") as PlaynuxGameCardElement;
+      card.classList.toggle("is-selected", game.id === selectedGridId);
+      gridCards.set(game.id, card);
+    }
+    if (card.game !== game) card.game = game;
+    if (card !== anchor) gameGrid.insertBefore(card, anchor);
+    anchor = card.nextElementSibling;
+  }
   gameGrid.hidden = visibleGames.length === 0;
-  gameCount.textContent = visibleGames.length === 1 ? "1 jogo" : `${visibleGames.length} jogos`;
+  gameCount.textContent = visibleGames.length === 1 ? t("1 game") : t("{0} games", visibleGames.length);
   updateEmpty(visibleGames);
   gridDirty = false;
 }
 
+let selectedGridId = "";
+function selectGridCard(id: string): void {
+  gridCards.get(selectedGridId)?.classList.remove("is-selected");
+  selectedGridId = id;
+  gridCards.get(selectedGridId)?.classList.add("is-selected");
+}
+
 function renderDetailsList(): void {
+  if (viewMode !== "details") return;
   detailsCount.textContent = visibleGames.length === 1 ? "1" : String(visibleGames.length);
   if (visibleGames.length === 0) {
     const message = document.createElement("p");
     message.className = "details-list-empty";
-    message.textContent = "Nenhum jogo para mostrar.";
+    message.textContent = t("No games to display.");
     detailsList.replaceChildren(message);
     return;
   }
@@ -319,16 +352,16 @@ function renderDetailsList(): void {
     button.style.setProperty("--custom-contextmenu-data", game.id);
     button.classList.toggle("is-selected", detailsGame?.id === game.id);
     button.classList.toggle("is-uninstalled", !game.is_installed);
-    button.setAttribute("aria-label", `Ver ${game.name}`);
+    button.setAttribute("aria-label", t("View {0}", game.name));
 
     const thumb = document.createElement("span");
     thumb.className = "details-row-thumb";
     const imageSource = remoteImage(game.icon);
     if (imageSource) {
       const image = document.createElement("img");
-      image.src = imageSource;
       image.alt = "";
       image.loading = "lazy";
+      setArtworkImage(image, imageSource, "icon");
       image.addEventListener("error", () => {
         image.remove();
         thumb.textContent = initials(game.name);
@@ -349,7 +382,7 @@ function renderDetailsList(): void {
     const pip = document.createElement("span");
     pip.className = "details-row-pip";
     pip.hidden = !game.is_installed;
-    pip.title = "Instalado";
+    pip.title = t("Installed");
 
     button.append(thumb, copy, pip);
     button.addEventListener("click", () => {
@@ -456,7 +489,7 @@ async function reloadAll(notify: boolean, discoverNew = false): Promise<void> {
       integrations.downloadNew(allGames.filter((game) => !known.has(game.id)).map((game) => game.id));
     }
     if (notify) {
-      showToast(`Biblioteca atualizada: ${allGames.length} jogos.`);
+      showToast(t("Library updated with {0} games.", allGames.length));
     }
   } catch (error) {
     if (sequence === loadSequence) {
@@ -478,8 +511,8 @@ function renderOrigins(): void {
       origins.set(id, stores.find((store) => store.id === id)?.name || sourceLabel(game));
     }
   }
-  const entries = Array.from(origins).sort((a, b) => a[1].localeCompare(b[1], "pt-BR"));
-  sourceFilter.replaceChildren(new Option("Todas as origens", ""), ...entries.map(([id, label]) => new Option(label, id)));
+  const entries = Array.from(origins).sort((a, b) => a[1].localeCompare(b[1], language));
+  sourceFilter.replaceChildren(new Option(t("All sources"), ""), ...entries.map(([id, label]) => new Option(label, id)));
   sourceFilter.value = origins.has(selected) ? selected : "";
 }
 
@@ -503,7 +536,7 @@ async function selectDetails(game: Game, fetch = true): Promise<void> {
   detailsGame = game;
   renderDetails();
   renderDetailsList();
-  if (!fetch) {
+  if (!fetch || viewMode !== "details") {
     return;
   }
   try {
@@ -518,47 +551,23 @@ async function selectDetails(game: Game, fetch = true): Promise<void> {
   }
 }
 
-let trailerTimer: ReturnType<typeof setTimeout> | null = null;
-
-function resetDetailsTrailer(): void {
-  if (trailerTimer) {
-    clearTimeout(trailerTimer);
-    trailerTimer = null;
-  }
-  detailsHeroVideo.replaceChildren();
-  detailsHeroVideo.hidden = true;
-}
-
-function scheduleBackgroundTrailer(url: string): void {
-  resetDetailsTrailer();
-  if (!url) return;
-  trailerTimer = setTimeout(async () => {
-    try {
-      const settings = await HostService.GetUISettings();
-      if (!settings.background_trailer) return;
-      const embed = trailerEmbedURL(url, { autoplay: true, muted: true, background: true });
-      if (!embed || !detailsHeroVideo) return;
-      const frame = document.createElement("iframe");
-      frame.src = embed;
-      frame.allow = "autoplay";
-      frame.title = "Background Trailer";
-      detailsHeroVideo.replaceChildren(frame);
-      detailsHeroVideo.hidden = false;
-    } catch {
-      // Ignora erro se falhar reprodução de fundo
-    }
-  }, 2200);
+function refreshBackgroundTrailers(): void {
+  const enabled = uiSettings.background_trailer && !launching && !bigPicture.isOpen();
+  const drawerOpen = drawer.classList.contains("is-open");
+  detailsTrailer.set(detailsGame, enabled && viewMode === "details" && !drawerOpen);
+  drawerTrailer.set(selectedGame, enabled && drawerOpen);
 }
 
 function renderDetails(): void {
+  if (viewMode !== "details") return;
   const game = detailsGame;
   if (!game) {
     detailsHero.classList.add("is-empty");
     detailsPlaceholder.hidden = false;
     detailsBody.hidden = true;
     detailsBg.removeAttribute("src");
-    resetDetailsTrailer();
-    renderCompatibility(detailsCompatibility, null, showToast);
+    detailsTrailer.stop();
+    renderCompatibility(detailsCompatibility, null);
     return;
   }
 
@@ -567,11 +576,9 @@ function renderDetails(): void {
   detailsBody.hidden = false;
 
   const backdrop = game.background_image || game.cover_image || "";
-  if (backdrop) {
-    detailsBg.src = backdrop;
-  } else {
-    detailsBg.removeAttribute("src");
-  }
+  if (!backdrop) delete detailsCompatibility.dataset.backdrop;
+  detailsBg.onload = () => sampleBackdrop(detailsBg, detailsCompatibility);
+  setArtworkImage(detailsBg, backdrop, "banner");
   detailsBg.alt = "";
   detailsTitle.textContent = game.name;
   detailsLogo.onerror = () => {
@@ -579,7 +586,7 @@ function renderDetails(): void {
     detailsTitle.hidden = false;
   };
   if (game.logo_image) {
-    detailsLogo.src = game.logo_image;
+    setArtworkImage(detailsLogo, game.logo_image, "logo");
     detailsLogo.alt = game.name;
     detailsLogo.hidden = false;
     detailsTitle.hidden = true;
@@ -592,22 +599,22 @@ function renderDetails(): void {
   const launchable = canLaunch(game);
   detailsPlay.disabled = launching;
   if (!game.is_installed) {
-    detailsPlay.textContent = "INSTALAR";
-    detailsPlay.title = `Instalar ${game.name} pelo cliente ou adicionar executável`;
+    detailsPlay.textContent = t("INSTALL");
+    detailsPlay.title = t("Install {0} through its client or add an executable", game.name);
     detailsPlay.classList.add("is-install");
     detailsPlay.classList.remove("is-disabled");
   } else {
-    detailsPlay.textContent = launching ? "INICIANDO…" : launchable ? "▶ JOGAR" : "INDISPONÍVEL";
-    detailsPlay.title = launchable ? `Jogar ${game.name}` : launchBlockReason(game);
+    detailsPlay.textContent = launching ? t("STARTING…") : launchable ? t("▶ PLAY") : t("UNAVAILABLE");
+    detailsPlay.title = launchable ? t("Play {0}", game.name) : launchBlockReason(game);
     detailsPlay.classList.remove("is-install");
     detailsPlay.classList.toggle("is-disabled", !launchable);
   }
 
   renderGameInformation(game, detailsDescription, detailsFacts, element("details-tags"));
 
-  scheduleBackgroundTrailer(game.trailer_url);
+  refreshBackgroundTrailers();
 
-  renderCompatibility(detailsCompatibility, game, showToast);
+  renderCompatibility(detailsCompatibility, game);
 
   // Restart the subtle hero fade when switching games without rebuilding the
   // whole panel (keeps scrolling and focus stable).
@@ -626,19 +633,19 @@ function setDrawerPlayButton(game: Game): void {
   const launchable = canLaunch(game);
   drawerPlay.disabled = launching;
   if (!game.is_installed) {
-    drawerPlay.textContent = "Instalar";
-    drawerPlay.title = `Instalar ${game.name}`;
+    drawerPlay.textContent = t("Install");
+    drawerPlay.title = t("Install {0}", game.name);
     drawerPlay.classList.add("secondary");
     return;
   }
   drawerPlay.classList.toggle("secondary", !launchable);
   if (!launchable) {
-    drawerPlay.textContent = "Indisponível";
+    drawerPlay.textContent = t("Unavailable");
     drawerPlay.title = launchBlockReason(game);
     return;
   }
-  drawerPlay.textContent = launching ? "Iniciando…" : "▶ Jogar";
-  drawerPlay.title = `Jogar ${game.name}`;
+  drawerPlay.textContent = launching ? t("Launching…") : t("▶ Play");
+  drawerPlay.title = t("Play {0}", game.name);
 }
 
 function renderDrawer(game: Game): void {
@@ -650,69 +657,40 @@ function renderDrawer(game: Game): void {
   drawerCover.hidden = true;
   drawerCover.onload = () => {
     drawerCover.hidden = false;
+    sampleBackdrop(drawerCover, drawerCompatibility);
   };
   drawerCover.onerror = () => {
     drawerCover.hidden = true;
   };
-  if (game.cover_image) {
-    drawerCover.src = game.cover_image;
-  } else {
-    drawerCover.removeAttribute("src");
-    drawerCover.hidden = true;
-  }
+  const backdrop = game.background_image || game.cover_image;
+  if (!backdrop) delete drawerCompatibility.dataset.backdrop;
+  setArtworkImage(drawerCover, backdrop, "banner");
+  if (drawerCover.complete && drawerCover.naturalWidth) drawerCover.hidden = false;
 
   const size = formatSize(game.install_size);
 
   if (!canLaunch(game)) {
-    drawerInstalled.textContent = game.plugin_id === "xbox" ? "Somente biblioteca (Xbox)" : "Emulador não encontrado";
+    drawerInstalled.textContent = game.plugin_id === "xbox" ? t("Library only (Xbox)") : t("Emulator not found");
   } else if (game.is_installed) {
-    drawerInstalled.textContent = size ? `Instalado · ${size}` : "Instalado";
+    drawerInstalled.textContent = size ? t("Installed · {0}", size) : t("Installed");
   } else {
-    drawerInstalled.textContent = "Não instalado";
+    drawerInstalled.textContent = t("Not installed");
   }
 
   renderGameInformation(game, drawerDescription, drawerFacts, element("drawer-tags"));
 
-  resetTrailer(game.trailer_url);
+  refreshBackgroundTrailers();
   setDrawerPlayButton(game);
-  renderCompatibility(drawerCompatibility, game, showToast);
-}
-
-function resetTrailer(url: string | null | undefined): void {
-  drawerTrailerPlayer.replaceChildren();
-  drawerTrailerPlayer.hidden = true;
-  drawerTrailerPlay.hidden = false;
-  const hasTrailer = Boolean(url && url.trim());
-  drawerTrailer.hidden = !hasTrailer;
-  drawerTrailerPlay.title = hasTrailer ? "Reproduzir trailer oficial" : "";
-}
-
-function playTrailer(): void {
-  if (!selectedGame?.trailer_url) {
-    return;
-  }
-  const url = trailerEmbedURL(selectedGame.trailer_url);
-  if (!url) {
-    window.open(selectedGame.trailer_url, "_blank", "noopener");
-    return;
-  }
-  const frame = document.createElement("iframe");
-  frame.src = url;
-  frame.title = `Trailer de ${selectedGame.name}`;
-  frame.allow = "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture";
-  frame.allowFullscreen = true;
-  frame.referrerPolicy = "strict-origin-when-cross-origin";
-  drawerTrailerPlayer.replaceChildren(frame);
-  drawerTrailerPlayer.hidden = false;
-  drawerTrailerPlay.hidden = true;
+  renderCompatibility(drawerCompatibility, game);
 }
 
 async function openDrawer(game: Game): Promise<void> {
+  selectGridCard(game.id);
   lastFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   selectedGame = game;
-  renderDrawer(game);
   drawer.classList.add("is-open");
   drawer.setAttribute("aria-hidden", "false");
+  renderDrawer(game);
   try {
     const full = await HostService.GetGame(game.id);
     if (full && selectedGame?.id === game.id) {
@@ -739,7 +717,7 @@ function closeDrawer(): void {
   drawer.classList.remove("is-open");
   drawer.setAttribute("aria-hidden", "true");
   selectedGame = null;
-  resetTrailer("");
+  refreshBackgroundTrailers();
   if (lastFocused && lastFocused.isConnected) {
     lastFocused.focus({ preventScroll: true });
   }
@@ -751,11 +729,14 @@ async function launchGame(game: Game, origin: "details" | "drawer" | "big" = "de
     return;
   }
   if (!canLaunch(game)) {
-    showToast(launchBlockReason(game), true);
+    const message = launchBlockReason(game);
+    recordGameError(game.name, t("Launch"), message);
+    showToast(message, true);
     return;
   }
 
   launching = true;
+  refreshBackgroundTrailers();
   if (detailsGame?.id === game.id) {
     renderDetails();
   }
@@ -764,7 +745,7 @@ async function launchGame(game: Game, origin: "details" | "drawer" | "big" = "de
   }
   try {
     await HostService.LaunchGame(game.id);
-    showToast(`Iniciando ${game.name}… O Deep Sleep será ativado quando o jogo abrir.`);
+    showToast(t("Launching {0}… Deep Sleep begins once the game opens.", game.name));
     if (origin === "drawer") {
       closeDrawer();
     }
@@ -772,9 +753,12 @@ async function launchGame(game: Game, origin: "details" | "drawer" | "big" = "de
       bigPicture.close();
     }
   } catch (error) {
-    showToast(messageOf(error), true);
+    const message = messageOf(error);
+    recordGameError(game.name, t("Launch"), message);
+    showToast(message, true);
   } finally {
     launching = false;
+    refreshBackgroundTrailers();
     if (detailsGame?.id === game.id) {
       renderDetails();
     }
@@ -810,7 +794,7 @@ function renderApps(): void {
   if (!visible.length) {
     const empty = document.createElement("p");
     empty.className = "apps-empty";
-    empty.textContent = appsLoading ? "Procurando aplicativos…" : "Nenhum app de jogo encontrado.";
+    empty.textContent = appsLoading ? t("Finding apps…") : t("No game apps found.");
     appsList.replaceChildren(empty);
     appsAdd.disabled = true;
     return;
@@ -845,7 +829,7 @@ function renderApps(): void {
     const name = document.createElement("strong");
     name.textContent = app.name;
     const meta = document.createElement("span");
-    meta.textContent = app.added ? `${app.source} · já na biblioteca` : app.source;
+    meta.textContent = app.added ? t("{0} · Already in the library", app.source) : app.source;
     copy.append(name, meta);
     row.append(checkbox, icon, copy);
     rows.push(row);
@@ -885,7 +869,7 @@ async function addSelectedApps(): Promise<void> {
     selectedApps.clear();
     await reloadAll(false, true);
     await loadLocalApps();
-    showToast(`${ids.length} app(s) adicionado(s) à biblioteca.`);
+    showToast(t("{0} apps added to the library.", ids.length));
   } catch (error) {
     manualErrorText(messageOf(error));
   } finally {
@@ -930,7 +914,7 @@ async function addManualGame(): Promise<void> {
   }
   const path = manualPath.value.trim();
   if (!path) {
-    manualErrorText("Selecione ou digite o caminho de um executável.");
+    manualErrorText(t("Choose or enter an executable path."));
     manualPath.focus();
     return;
   }
@@ -942,115 +926,12 @@ async function addManualGame(): Promise<void> {
       manualDialog.close();
       await reloadAll(false, true);
       await selectDetails(game);
-      showToast(`${game.name} adicionado à biblioteca.`);
+      showToast(t("{0} added to the library.", game.name));
     }
   } catch (error) {
     manualErrorText(messageOf(error));
   } finally {
     setManualBusy(false);
-  }
-}
-
-function setFolderBusy(value: boolean): void {
-  folderBusy = value;
-  folderSubmit.disabled = value;
-  folderPath.disabled = value;
-}
-
-function renderFolderList(folders: string[]): void {
-  if (folders.length === 0) {
-    const emptyText = document.createElement("p");
-    emptyText.className = "folder-empty";
-    emptyText.textContent = "Nenhuma pasta adicionada ainda.";
-    folderList.replaceChildren(emptyText);
-    return;
-  }
-  const rows = folders.map((folder) => {
-    const row = document.createElement("div");
-    row.className = "folder-row";
-    const path = document.createElement("span");
-    path.textContent = folder;
-    path.title = folder;
-    const remove = document.createElement("button");
-    remove.type = "button";
-    remove.className = "folder-remove";
-    remove.textContent = "Remover";
-    remove.addEventListener("click", () => void removeFolder(folder));
-    row.append(path, remove);
-    return row;
-  });
-  folderList.replaceChildren(...rows);
-}
-
-async function refreshFolderList(): Promise<void> {
-  const folders = folderKind === "local"
-    ? await HostService.GetLocalFolders()
-    : await HostService.GetRomFolders();
-  renderFolderList(folders || []);
-}
-
-async function openFolderDialog(kind: "local" | "rom"): Promise<void> {
-  folderKind = kind;
-  const isLocal = kind === "local";
-  folderTitle.textContent = isLocal ? "Escanear pasta de jogos" : "Adicionar pasta de ROMs";
-  folderHint.textContent = isLocal
-    ? "O Playnux procura ELF com permissão +x e scripts .sh. Cada subpasta vira um jogo."
-    : "A pasta deve seguir o padrão EmuDeck/EmulationStation (ps2, switch, snes…). As pastas padrão de ~/ROMs já são verificadas.";
-  folderPath.placeholder = isLocal ? "~/Games" : "~/ROMs/ps2";
-  folderPath.value = "";
-  renderFolderList([]);
-  if (!folderDialog.open) {
-    folderDialog.showModal();
-  }
-  folderPath.focus();
-  try {
-    await refreshFolderList();
-  } catch (error) {
-    showToast(messageOf(error), true);
-  }
-}
-
-async function addFolder(): Promise<void> {
-  if (folderBusy) {
-    return;
-  }
-  const path = folderPath.value.trim();
-  if (!path) {
-    folderPath.focus();
-    return;
-  }
-
-  setFolderBusy(true);
-  try {
-    const games = folderKind === "local"
-      ? await HostService.AddLocalFolder(path)
-      : await HostService.AddRomFolder(path);
-    showToast(`${cleanGames(games).length} jogos encontrados na fonte local.`);
-    folderDialog.close();
-    await reloadAll(false, true);
-  } catch (error) {
-    showToast(messageOf(error), true);
-  } finally {
-    setFolderBusy(false);
-  }
-}
-
-async function removeFolder(path: string): Promise<void> {
-  if (folderBusy) {
-    return;
-  }
-  setFolderBusy(true);
-  try {
-    const games = folderKind === "local"
-      ? await HostService.RemoveLocalFolder(path)
-      : await HostService.RemoveRomFolder(path);
-    await refreshFolderList();
-    await reloadAll(false);
-    showToast(`Pasta removida. ${cleanGames(games).length} jogos permanecem na fonte local.`);
-  } catch (error) {
-    showToast(messageOf(error), true);
-  } finally {
-    setFolderBusy(false);
   }
 }
 
@@ -1068,15 +949,17 @@ function setViewMode(mode: ViewMode, persist = true): void {
 
 function openBigPicture(): void {
   if (visibleGames.length === 0) {
-    showToast("Não há jogos na visualização atual para abrir no Big Picture.", true);
+    showToast(t("There are no games in this view to open in Big Picture."), true);
     return;
   }
-  void bigPicture.open(visibleGames, detailsGame?.id || "").catch((error) => {
-    showToast(`Não foi possível abrir a tela cheia. ${messageOf(error)}`, true);
+  void bigPicture.open(visibleGames, detailsGame?.id || "").then(refreshBackgroundTrailers).catch((error) => {
+    showToast(t("Could not enter full screen. {0}", messageOf(error)), true);
   });
 }
 
 function setupEventListeners(): void {
+  configureDetailsSidebar(detailsView, sidebarToggle);
+  configureGridCards(gameGrid);
   document.querySelectorAll<HTMLElement>("[data-close-drawer]").forEach((control) => {
     control.addEventListener("click", closeDrawer);
   });
@@ -1092,7 +975,8 @@ function setupEventListeners(): void {
       void launchGame(selectedGame, "drawer");
     }
   });
-  drawerTrailerPlay.addEventListener("click", playTrailer);
+  document.addEventListener("visibilitychange", refreshBackgroundTrailers);
+  document.addEventListener("playnux:media-visibility", refreshBackgroundTrailers);
 
   bigPictureButton.addEventListener("click", openBigPicture);
 
@@ -1141,11 +1025,11 @@ function setupEventListeners(): void {
   });
   element("menu-scan-local").addEventListener("click", () => {
     toggleSystemMenu(false);
-    void openFolderDialog("local");
+    integrations.open("stores", "linux");
   });
   element("menu-scan-roms").addEventListener("click", () => {
     toggleSystemMenu(false);
-    void openFolderDialog("rom");
+    integrations.open("stores", "emulation");
   });
   element("menu-metadata").addEventListener("click", () => {
     toggleSystemMenu(false);
@@ -1163,17 +1047,6 @@ function setupEventListeners(): void {
     toggleSystemMenu(false);
     openBigPicture();
   });
-  folderCancel.addEventListener("click", () => folderDialog.close());
-  folderForm.addEventListener("submit", (event) => {
-    event.preventDefault();
-    void addFolder();
-  });
-  folderDialog.addEventListener("close", () => {
-    folderPath.disabled = false;
-    folderSubmit.disabled = false;
-    folderBusy = false;
-  });
-
   manualCancel.addEventListener("click", () => manualDialog.close());
   manualPick.addEventListener("click", () => void pickManualExecutable());
   appsRefresh.addEventListener("click", () => {
@@ -1188,7 +1061,7 @@ function setupEventListeners(): void {
   });
   manualScanFolder.addEventListener("click", () => {
     manualDialog.close();
-    void openFolderDialog("local");
+    integrations.open("stores", "linux");
   });
   manualDialog.addEventListener("close", () => {
     setManualBusy(false);
@@ -1327,14 +1200,15 @@ const integrations = setupIntegrations({
   games: () => allGames,
   filteredGames: () => visibleGames,
   selected: () => selectedGame || detailsGame,
-  configureFolders: openFolderDialog,
   addGame: openManualDialog,
   reload: (discoverNew = false) => reloadAll(false, discoverNew),
   applyDownloads: applyDownloadedGames,
+  recordGameError,
   error: messageOf,
   report: showToast,
   applyAppearance: (settings) => {
     uiSettings = applyUISettings(settings);
+    refreshBackgroundTrailers();
   },
   setViewMode: (mode) => setViewMode(mode, false),
 });
@@ -1355,6 +1229,7 @@ function applyUpdatedGame(updated: Game): void {
 
 const properties = setupGameProperties({
   error: messageOf,
+  recordGameError,
   toast: showToast,
   onGameUpdated: applyUpdatedGame,
 });
@@ -1364,6 +1239,13 @@ element("details-launch-options").addEventListener("click", () => {
 });
 element("drawer-launch-options").addEventListener("click", () => {
   if (selectedGame) properties.open(selectedGame, "general");
+});
+
+Events.On("gameplay:launch-error", (event) => {
+  const result = event.data as { game?: string; message?: string } | null;
+  if (!result?.game || !result.message) return;
+  recordGameError(result.game, t("Game process"), result.message);
+  showToast(t("{0} failed. See Notifications.", result.game), true);
 });
 
 Events.On("library:game-menu", (event) => {
@@ -1384,6 +1266,7 @@ Events.On("library:game-menu", (event) => {
 });
 
 async function start(): Promise<void> {
+  void HostService.SetInterfaceLanguage(language).catch(() => undefined);
   // Local scanning is manual; startup only restores saved appearance and the
   // already imported library.
   try {
@@ -1398,3 +1281,9 @@ async function start(): Promise<void> {
 }
 
 void start();
+const openUpdates = setupUpdates(showToast);
+element("menu-updates").addEventListener("click", () => {
+  const trigger = element("system-menu-trigger");
+  if (trigger.getAttribute("aria-expanded") === "true") trigger.click();
+  openUpdates();
+});

@@ -11,6 +11,9 @@ import (
 
 func storeMetadataFields(game *models.Game) map[string]any {
 	fields := make(map[string]any)
+	if game.PluginID == "epic" && game.Name != "" {
+		fields["name"] = game.Name
+	}
 	for key, value := range map[string]string{
 		"description": game.Description, "icon": game.Icon, "cover_image": game.CoverImage,
 		"background_image": game.BackgroundImage, "logo_image": game.LogoImage, "trailer_url": game.TrailerURL,

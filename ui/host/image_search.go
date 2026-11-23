@@ -6,10 +6,12 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/playnux/core/metadata"
 	"github.com/wailsapp/wails/v3/pkg/application"
+	"github.com/wailsapp/wails/v3/pkg/events"
 )
 
 func (h *Host) searchGoogleImages(ctx context.Context, query string, transparent bool) ([]metadata.WebImage, error) {
@@ -53,25 +55,40 @@ func (h *Host) searchGoogleImages(ctx context.Context, query string, transparent
 	defer server.Close()
 
 	reportURL := "http://" + listener.Addr().String() + "/" + token
+	width, height, minWidth, minHeight := FitWindowToScreen(app, 1020, 740, 480, 520)
 	window := app.Window.NewWithOptions(application.WebviewWindowOptions{
-		Name:   "playnux-image-search-" + token,
-		Title:  "Playnux — Google Imagens",
-		URL:    searchURL,
-		JS:     googleResultsScript(reportURL),
-		Hidden: true,
+		Name:      "playnux-image-search-" + token,
+		Title:     "Playnux — Google Imagens",
+		URL:       searchURL,
+		JS:        googleResultsScript(reportURL),
+		Width:     width,
+		Height:    height,
+		MinWidth:  minWidth,
+		MinHeight: minHeight,
 	})
+	closed := make(chan struct{})
+	var closeOnce sync.Once
+	unregister := window.OnWindowEvent(events.Common.WindowClosing, func(*application.WindowEvent) {
+		closeOnce.Do(func() { close(closed) })
+	})
+	defer unregister()
 	defer window.Close()
+	window.Show()
+	window.Center()
+	window.Focus()
 
-	timeout, cancel := context.WithTimeout(ctx, 18*time.Second)
+	timeout, cancel := context.WithTimeout(ctx, 90*time.Second)
 	defer cancel()
 	select {
 	case images := <-results:
 		if len(images) > 0 {
 			return images, nil
 		}
+	case <-closed:
+		return nil, fmt.Errorf("busca fechada. Você também pode colar o endereço da imagem")
 	case <-timeout.Done():
 	}
-	return nil, fmt.Errorf("não foi possível obter miniaturas do Google. Você pode abrir a busca no navegador")
+	return nil, fmt.Errorf("o Google não retornou miniaturas. Abra a busca no navegador e cole o endereço da imagem")
 }
 
 func googleResultsScript(reportURL string) string {
@@ -93,16 +110,22 @@ func googleResultsScript(reportURL string) string {
     }
     if (!rows.length) {
       for (const image of document.images) {
-        const width = image.naturalWidth;
-        const height = image.naturalHeight;
+        const width = image.naturalWidth || image.width;
+        const height = image.naturalHeight || image.height;
         if (width < 64 || height < 48) continue;
-        const src = image.currentSrc || image.src || image.getAttribute("data-src");
-        try {
-          const url = new URL(src);
-          if (url.protocol !== "https:" || !url.hostname.startsWith("encrypted-tbn") || !url.hostname.endsWith(".gstatic.com")) continue;
-          const tuple = JSON.stringify([url.href, height, width]);
-          if (tuple.length < 850) rows.push(tuple + "," + tuple);
-        } catch {}
+        const candidates = [image.currentSrc, image.getAttribute("data-src"), image.src];
+        const thumb = candidates.find(src => {
+          try {
+            const url = new URL(src);
+            return url.protocol === "https:" && url.hostname.startsWith("encrypted-tbn") && url.hostname.endsWith(".gstatic.com");
+          } catch { return false; }
+        });
+        if (!thumb) continue;
+        const link = image.closest("a[href]");
+        const original = link ? new URL(link.href, location.href).searchParams.get("imgurl") : null;
+        const thumbnail = JSON.stringify([thumb, height, width]);
+        const full = JSON.stringify([/^https?:\/\//i.test(original || "") ? original : thumb, height, width]);
+        if (thumbnail.length + full.length <= 1800) rows.push(thumbnail + "," + full);
         if (rows.length >= 24) break;
       }
     }

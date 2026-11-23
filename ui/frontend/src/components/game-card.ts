@@ -1,5 +1,7 @@
+import { t } from "../i18n";
 import type { Game } from "../../bindings/github.com/playnux/core/models/models";
-import { canLaunch, cardSubtitle, initials, launchBlockReason, sourceClass, sourceLabel } from "../format";
+import { setArtworkImage } from "../artwork-images";
+import { canLaunch, formatPlaytime, initials, launchBlockReason, sourceClass, sourceLabel } from "../format";
 
 // Cartão da grade. Usa light DOM de propósito: o CSS global já estiliza a
 // biblioteca e o card continua acessível para os testes de layout.
@@ -19,7 +21,8 @@ export class PlaynuxGameCardElement extends HTMLElement {
   private readonly playButton: HTMLButtonElement;
   private readonly heading: HTMLElement;
   private readonly icon: HTMLImageElement;
-  private readonly subtitle: HTMLElement;
+  private readonly source: HTMLElement;
+  private readonly playtime: HTMLElement;
   private readonly sourceDot: HTMLElement;
   private readonly installedPip: HTMLElement;
   private lastCover = "";
@@ -57,7 +60,7 @@ export class PlaynuxGameCardElement extends HTMLElement {
     this.playButton.className = "game-play";
     this.playButton.type = "button";
     this.playButton.textContent = "▶";
-    this.playButton.setAttribute("aria-label", "Jogar");
+    this.playButton.setAttribute("aria-label", t("Play"));
 
     this.cover.append(this.image, this.fallback, this.coverShade, this.badge, this.playButton);
 
@@ -67,8 +70,12 @@ export class PlaynuxGameCardElement extends HTMLElement {
     this.heading = document.createElement("h3");
     this.heading.className = "game-title";
 
-    this.subtitle = document.createElement("div");
-    this.subtitle.className = "game-sub";
+    const subtitle = document.createElement("div");
+    subtitle.className = "game-sub";
+    this.source = document.createElement("span");
+    this.source.className = "game-source";
+    this.playtime = document.createElement("span");
+    this.playtime.className = "game-playtime";
 
     this.sourceDot = document.createElement("span");
     this.sourceDot.className = "source-dot";
@@ -76,28 +83,32 @@ export class PlaynuxGameCardElement extends HTMLElement {
 
     this.installedPip = document.createElement("span");
     this.installedPip.className = "installed-pip";
-    this.installedPip.title = "Instalado";
-    this.installedPip.hidden = true;
+    this.installedPip.title = t("Installed");
+    this.installedPip.setAttribute("role", "img");
 
-    this.subtitle.append(this.sourceDot, document.createTextNode(""), this.installedPip);
+    subtitle.append(this.sourceDot, this.source, this.playtime, this.installedPip);
     this.icon = document.createElement("img");
     this.icon.className = "game-library-icon";
     this.icon.alt = "";
+    this.icon.loading = "lazy";
+    this.icon.decoding = "async";
     this.icon.hidden = true;
     this.icon.addEventListener("error", () => { this.icon.hidden = true; });
     const titleRow = document.createElement("div");
     titleRow.className = "game-title-row";
     titleRow.append(this.icon, this.heading);
-    body.append(titleRow, this.subtitle);
+    body.append(titleRow, subtitle);
     this.frame.append(this.cover, body);
 
     this.image.addEventListener("load", () => {
       this.image.classList.remove("is-missing");
       this.fallback.classList.add("is-hidden");
+      this.cover.classList.remove("is-loading");
     });
     this.image.addEventListener("error", () => {
       this.image.classList.add("is-missing");
       this.fallback.classList.remove("is-hidden");
+      this.cover.classList.remove("is-loading");
     });
 
     this.frame.addEventListener("click", () => this.open());
@@ -166,42 +177,46 @@ export class PlaynuxGameCardElement extends HTMLElement {
     const icon = game.icon || "";
     if (/^(https?:|data:image\/|\/artwork\/)/i.test(icon)) {
       this.icon.hidden = false;
-      this.icon.src = icon;
+      setArtworkImage(this.icon, icon, "icon");
     } else {
       this.icon.hidden = true;
       this.icon.removeAttribute("src");
     }
-    this.subtitle.childNodes[1].textContent = cardSubtitle(game);
-    this.installedPip.hidden = !game.is_installed;
+    this.source.textContent = sourceLabel(game);
+    this.playtime.textContent = formatPlaytime(game.playtime);
+    this.playtime.hidden = !this.playtime.textContent;
+    const installed = game.is_installed ? t("Installed") : t("Not installed");
+    this.installedPip.title = installed;
+    this.installedPip.setAttribute("aria-label", installed);
 
     this.sourceDot.className = `source-dot ${sourceClass(game)}`;
     this.badge.textContent = sourceLabel(game);
 
     const launchable = canLaunch(game);
-    this.playButton.disabled = false;
+    this.playButton.disabled = game.is_installed && !launchable;
     if (!game.is_installed) {
       this.playButton.textContent = "⬇";
-      this.playButton.title = `Instalar ${game.name}`;
-      this.playButton.setAttribute("aria-label", `Instalar ${game.name}`);
+      this.playButton.title = t("Install {0}", game.name);
+      this.playButton.setAttribute("aria-label", t("Install {0}", game.name));
     } else {
       this.playButton.textContent = "▶";
-      this.playButton.disabled = !launchable;
       this.playButton.title = launchable
-        ? `Jogar ${game.name}`
+        ? t("Play {0}", game.name)
         : launchBlockReason(game);
-      this.playButton.setAttribute("aria-label", `Jogar ${game.name}`);
+      this.playButton.setAttribute("aria-label", t("Play {0}", game.name));
     }
-    this.frame.setAttribute("aria-label", `Abrir detalhes de ${game.name}`);
+    this.frame.setAttribute("aria-label", t("Open details for {0}", game.name));
 
     this.fallbackText.textContent = initials(game.name);
     if (game.cover_image !== this.lastCover) {
       this.lastCover = game.cover_image;
+      this.cover.classList.toggle("is-loading", Boolean(game.cover_image));
+      this.fallback.classList.remove("is-hidden");
+      this.image.classList.add("is-missing");
       if (!game.cover_image) {
         this.image.removeAttribute("src");
-        this.image.classList.add("is-missing");
-        this.fallback.classList.remove("is-hidden");
       } else {
-        this.image.src = game.cover_image;
+        setArtworkImage(this.image, game.cover_image, "cover");
       }
     }
   }

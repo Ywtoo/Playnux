@@ -5,6 +5,7 @@ go 1.26.0
 require (
 	github.com/playnux/core v0.0.0
 	github.com/wailsapp/wails/v3 v3.0.0
+	golang.org/x/mod v0.41.0
 )
 
 replace github.com/playnux/core => ../core
@@ -21,6 +22,7 @@ require (
 	github.com/ncruces/go-strftime v1.0.0 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	golang.org/x/exp v0.0.0-20260410095643-746e56fc9e2f // indirect
+	golang.org/x/image v0.45.0 // indirect
 	golang.org/x/sys v0.48.0 // indirect
 	modernc.org/libc v1.67.6 // indirect
 	modernc.org/mathutil v1.7.1 // indirect

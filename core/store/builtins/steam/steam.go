@@ -450,20 +450,39 @@ func detectLocalSteamID64() (string, error) {
 	return "", fmt.Errorf("nenhum steamid64 local encontrado")
 }
 
-func scanLocalInstalledGames() map[string]*models.Game {
-	results := make(map[string]*models.Game)
+// Roots returns the Steam data directories used by native and Flatpak installs.
+func Roots() []string {
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return results
+		return nil
 	}
-
-	steamappsDirs := []string{
-		filepath.Join(home, ".steam/steam/steamapps"),
-		filepath.Join(home, ".local/share/Steam/steamapps"),
-		filepath.Join(home, ".var/app/com.valvesoftware.Steam/.local/share/Steam/steamapps"),
+	var roots []string
+	seen := make(map[string]bool)
+	for _, rel := range []string{
+		".steam/steam", ".local/share/Steam", ".steam/root",
+		".var/app/com.valvesoftware.Steam/.local/share/Steam",
+		".var/app/com.valvesoftware.Steam/data/Steam",
+	} {
+		root, err := filepath.EvalSymlinks(filepath.Join(home, rel))
+		if err == nil && !seen[root] {
+			seen[root] = true
+			roots = append(roots, root)
+		}
 	}
+	return roots
+}
 
-	for _, sDir := range libraryDirectories(steamappsDirs) {
+func LibraryDirectories() []string {
+	var defaults []string
+	for _, root := range Roots() {
+		defaults = append(defaults, filepath.Join(root, "steamapps"))
+	}
+	return libraryDirectories(defaults)
+}
+
+func scanLocalInstalledGames() map[string]*models.Game {
+	results := make(map[string]*models.Game)
+	for _, sDir := range LibraryDirectories() {
 		entries, err := os.ReadDir(sDir)
 		if err != nil {
 			continue
@@ -494,7 +513,6 @@ func scanLocalInstalledGames() map[string]*models.Game {
 					IsInstalled:      true,
 					InstallDirectory: fullInstallPath,
 					InstallSize:      size,
-					Platforms:        []string{"PC (Linux)"},
 				}
 			}
 		}

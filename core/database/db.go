@@ -27,20 +27,9 @@ func Open(path string) (*DB, error) {
 		return nil, fmt.Errorf("erro ao abrir sqlite: %w", err)
 	}
 
-	// Executa schema completo de uma vez
-	if _, err := conn.Exec(SchemaSQL); err != nil {
-		_ = conn.Close()
-		return nil, fmt.Errorf("erro ao aplicar schema inicial: %w", err)
-	}
-	if err := migrateGames(conn); err != nil {
+	if err := migrateDatabase(conn, path); err != nil {
 		_ = conn.Close()
 		return nil, err
-	}
-	// Recria o índice FTS a partir da tabela principal. Isso cobre bancos
-	// antigos que já tinham jogos antes dos triggers existirem.
-	if _, err := conn.Exec(`INSERT INTO games_fts(games_fts) VALUES('rebuild');`); err != nil {
-		_ = conn.Close()
-		return nil, fmt.Errorf("reconstruir índice de busca: %w", err)
 	}
 
 	key, err := sessionKey(path)
@@ -74,7 +63,7 @@ func isMemoryPath(path string) bool {
 
 // migrateGames adiciona colunas introduzidas depois da primeira versão do
 // schema. Bancos novos já nascem completos; ALTER TABLE mantém os antigos.
-func migrateGames(conn *sql.DB) error {
+func migrateGames(conn *sql.Tx) error {
 	columns := []struct {
 		name string
 		ddl  string

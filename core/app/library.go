@@ -99,18 +99,37 @@ func (c *App) loadSelection(ctx context.Context) error {
 		return nil
 	}
 	raw, err := c.db.GetSetting(ctx, settingLocalSelection)
-	if errors.Is(err, database.ErrSettingNotFound) {
-		return nil
-	}
-	if err != nil {
+	if err != nil && !errors.Is(err, database.ErrSettingNotFound) {
 		return err
 	}
 	var selection []string
-	if err := json.Unmarshal([]byte(raw), &selection); err != nil {
+	if err == nil && json.Unmarshal([]byte(raw), &selection) == nil {
+		c.linux.SetSelection(selection)
+	}
+
+	// Older builds registered desktop shortcuts without the installed flag.
+	games, err := c.db.ListGames(ctx, "all", 5000)
+	if err != nil {
+		return err
+	}
+	legacy := make(map[[2]string]*models.Game)
+	for _, game := range games {
+		if game.PluginID == "linux" && !game.IsInstalled && (game.Source == "Flatpak" || game.Source == "Linux") {
+			legacy[[2]string{game.Source, game.GameID}] = game
+		}
+	}
+	if len(legacy) == 0 {
 		return nil
 	}
-	c.linux.SetSelection(selection)
-	return nil
+	var repaired []*models.Game
+	for _, candidate := range c.linux.Candidates() {
+		if game := legacy[[2]string{candidate.Source, candidate.GameID}]; game != nil {
+			game.IsInstalled = true
+			game.Executable, game.Arguments = candidate.Executable, candidate.Arguments
+			repaired = append(repaired, game)
+		}
+	}
+	return c.db.UpsertGames(ctx, repaired)
 }
 
 // ClearLibrary apaga todos os jogos importados, as pastas configuradas e a
@@ -272,10 +291,6 @@ func (c *App) applyLibraryView(games []*models.Game) []*models.Game {
 	c.libraryMu.RLock()
 	settings := c.library
 	c.libraryMu.RUnlock()
-	if !settings.Unify {
-		return games
-	}
-
 	groups := make(map[string][]*models.Game)
 	order := make([]string, 0, len(games))
 	for _, game := range games {
@@ -285,6 +300,12 @@ func (c *App) applyLibraryView(games []*models.Game) []*models.Game {
 		key := normalizedTitle(game.Name)
 		if key == "" {
 			continue
+		}
+		if !settings.Unify {
+			if game.PluginID != "epic" && game.PluginID != "gog" {
+				continue
+			}
+			key = game.PluginID + ":" + key
 		}
 		if _, ok := groups[key]; !ok {
 			order = append(order, key)
@@ -407,7 +428,7 @@ func (c *App) withVariants(ctx context.Context, game *models.Game) *models.Game 
 	c.libraryMu.RLock()
 	unify := c.library.Unify
 	c.libraryMu.RUnlock()
-	if !unify || !unifiablePlugin(game.PluginID) {
+	if (!unify && game.PluginID != "epic" && game.PluginID != "gog") || !unifiablePlugin(game.PluginID) {
 		return game
 	}
 	games, err := c.db.ListGames(ctx, "all", 5000)
@@ -416,8 +437,8 @@ func (c *App) withVariants(ctx context.Context, game *models.Game) *models.Game 
 	}
 	key := normalizedTitle(game.Name)
 	var group []*models.Game
-	for _, candidate := range games {
-		if unifiablePlugin(candidate.PluginID) && normalizedTitle(candidate.Name) == key {
+	for _, candidate := range c.filterLibraryImports(ctx, games) {
+		if (unify || candidate.PluginID == game.PluginID) && unifiablePlugin(candidate.PluginID) && normalizedTitle(candidate.Name) == key {
 			group = append(group, candidate)
 		}
 	}

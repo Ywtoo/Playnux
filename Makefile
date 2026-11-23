@@ -6,7 +6,11 @@ BUILD_DIR ?= ./bin
 UI_DIR ?= ./ui
 FRONTEND_DIR ?= ./ui/frontend
 CORE_DIR ?= ./core
+WAILS ?= wails3
 PLAYNUX_SYSROOT ?=
+RELEASE_ARCH := $(shell go env GOARCH)
+RELEASE_VERSION := $(shell cat $(UI_DIR)/internal/release/version.txt)
+RELEASE_NAME := playnux-$(RELEASE_VERSION)-linux-$(RELEASE_ARCH)
 
 -include .playnux-build.mk
 
@@ -15,7 +19,7 @@ export PKG_CONFIG_SYSROOT_DIR := $(abspath $(PLAYNUX_SYSROOT))
 export PKG_CONFIG_PATH := $(PKG_CONFIG_SYSROOT_DIR)/usr/lib64/pkgconfig:$(PKG_CONFIG_SYSROOT_DIR)/usr/lib/pkgconfig:$(PKG_CONFIG_SYSROOT_DIR)/usr/share/pkgconfig
 endif
 
-.PHONY: all build build-frontend build-ui test test-core test-ui check-ui-deps run clean dev help
+.PHONY: all build build-bindings build-frontend build-ui package-linux test test-core test-ui check-ui-deps run clean dev help
 
 help:
 	@echo "Playnux Build System"
@@ -25,13 +29,19 @@ help:
 	@echo "make test           - Run all unit tests (core + ui)"
 	@echo "make build-frontend - Compile Vite/TypeScript frontend bundle"
 	@echo "make build-ui       - Compile Go/WebKitGTK binary to $(BUILD_DIR)/$(APP_NAME)"
+	@echo "make package-linux  - Build Linux RPM, DEB and binary archive with checksums"
 	@echo "make dev            - Run frontend development server"
 	@echo "make clean          - Clean build artifacts"
 
 all: test build
 
 # ── Frontend Build ───────────────────────────────────────────────────────────
-build-frontend:
+build-bindings: check-ui-deps
+	@mkdir -p $(UI_DIR)/frontend/dist
+	@test -n "$$(ls -A $(UI_DIR)/frontend/dist)" || touch $(UI_DIR)/frontend/dist/.gitkeep
+	@cd $(UI_DIR) && $(WAILS) generate bindings -f '-tags gtk3' -ts -i -clean=false .
+
+build-frontend: build-bindings
 	@echo "▶ Building frontend assets (Vite/TypeScript)..."
 	@cd $(FRONTEND_DIR) && npm run build
 
@@ -51,6 +61,20 @@ build-ui: check-ui-deps
 # ── Full Build ───────────────────────────────────────────────────────────────
 build: check-ui-deps build-frontend
 	@$(MAKE) build-ui
+
+package-linux: build
+	@mkdir -p $(BUILD_DIR)/release
+	@cd $(UI_DIR) && GOARCH="$(RELEASE_ARCH)" PLAYNUX_PACKAGE_VERSION="$(RELEASE_VERSION)" PLAYNUX_PACKAGE_BINARY="$(abspath $(BUILD_DIR)/$(APP_NAME))" $(WAILS) tool package -name "$(RELEASE_NAME)" -format rpm -config build/linux/nfpm/nfpm.yaml -out "$(abspath $(BUILD_DIR)/release)"
+	@cd $(UI_DIR) && GOARCH="$(RELEASE_ARCH)" PLAYNUX_PACKAGE_VERSION="$(RELEASE_VERSION)" PLAYNUX_PACKAGE_BINARY="$(abspath $(BUILD_DIR)/$(APP_NAME))" $(WAILS) tool package -name "$(RELEASE_NAME)" -format deb -config build/linux/nfpm/nfpm.yaml -out "$(abspath $(BUILD_DIR)/release)"
+	@stage=$$(mktemp -d); trap 'rm -rf "$$stage"' EXIT; \
+		mkdir "$$stage/$(RELEASE_NAME)"; \
+		install -m 755 "$(BUILD_DIR)/$(APP_NAME)" "$$stage/$(RELEASE_NAME)/playnux" && \
+		install -m 755 "$(UI_DIR)/build/linux/install.sh" "$$stage/$(RELEASE_NAME)/install.sh" && \
+		install -m 644 "$(UI_DIR)/build/linux/desktop" "$$stage/$(RELEASE_NAME)/playnux.desktop" && \
+		install -m 644 "$(UI_DIR)/build/appicon.png" "$$stage/$(RELEASE_NAME)/playnux.png" && \
+		cp LICENSE.md CREDITS.md "$$stage/$(RELEASE_NAME)/" && \
+		tar -czf "$(BUILD_DIR)/release/$(RELEASE_NAME).tar.gz" -C "$$stage" "$(RELEASE_NAME)"
+	@cd $(BUILD_DIR)/release && sha256sum "$(RELEASE_NAME).rpm" "$(RELEASE_NAME).deb" "$(RELEASE_NAME).tar.gz" > SHA256SUMS
 
 # ── Test Suite ───────────────────────────────────────────────────────────────
 test-core:

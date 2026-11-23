@@ -1,16 +1,16 @@
-# Créditos e Licenças de Terceiros (Playnux)
+# Playnux credits and third-party licenses
 
-O **Playnux** é um projeto independente de código aberto distribuído sob a licença **MIT**.
+**Playnux** is an independent open-source project distributed under the **MIT** license.
 
 ---
 
-## 🎮 Playnite (Conceitos de Arquitetura & Especificação de Metadados)
+## 🎮 Playnite (architecture and metadata concepts)
 
-O Playnux foi inspirado e utilizou como referência técnica os modelos de dados, campos de metadados de jogos e conceitos de biblioteca unificada desenvolvidos originalmente pelo projeto **Playnite** de **Josef Nemec**.
+Playnux draws on the data models, game metadata fields, and unified library concepts developed by **Josef Nemec** for **Playnite**.
 
-* **Autor Original:** Josef Nemec
-* **Repositório:** [https://github.com/JosefNemec/Playnite](https://github.com/JosefNemec/Playnite)
-* **Licença:** MIT License
+* **Original author:** Josef Nemec
+* **Repository:** [https://github.com/JosefNemec/Playnite](https://github.com/JosefNemec/Playnite)
+* **License:** MIT License
 
 ```text
 MIT License
@@ -30,27 +30,27 @@ copies or substantial portions of the Software.
 
 ---
 
-## 🔌 Referência de Plugins e Integrações de Lojas (PlayniteExtensions)
+## 🔌 plugin and store integration references (PlayniteExtensions)
 
-A especificação dos fluxos de sincronização digital para as lojas **Steam, GOG, Epic Games e Xbox** baseia-se nos plugins oficiais mantidos pela comunidade do Playnite sob a licença MIT:
+The library synchronization flows for **Steam, GOG, Epic Games, and Xbox** reference the official Playnite extensions maintained by the Playnite community under the MIT license.
 
-* **Repositório:** [https://github.com/JosefNemec/PlayniteExtensions](https://github.com/JosefNemec/PlayniteExtensions)
-* **Licença:** MIT License
-* **Copyright:** (c) Josef Nemec e colaboradores do Playnite
-
----
-
-## 🐧 Runners de Compatibilidade Linux (Wine & Proton)
-
-O suporte a execução de jogos Windows no Linux utiliza as ferramentas:
-* **Proton (Valve / Wine):** Compatibilidade e tradução DirectX via DXVK / VKD3D.
-* **Wine:** Software de camada de compatibilidade Windows para ecossistemas Unix.
-* **Heroic / Legendary / GOGdl:** Ferramentas comunitárias de suporte a Epic e GOG no Linux.
+* **Repository:** [https://github.com/JosefNemec/PlayniteExtensions](https://github.com/JosefNemec/PlayniteExtensions)
+* **License:** MIT License
+* **Copyright:** (c) Josef Nemec and Playnite contributors
 
 ---
 
-## 🛡️ Bases Comunitárias de Compatibilidade & Anti-Cheat
+## 🐧 Linux compatibility runners (Wine & Proton)
 
-* **ProtonDB / Comunidade Proton:** Relatórios e avaliações comunitárias de compatibilidade via Proton ([protondb.com](https://www.protondb.com)).
-* **AreWeAntiCheatYet:** Catálogo aberto de suporte a softwares anti-cheat no Linux/Wine/Proton ([areweanticheatyet.com](https://areweanticheatyet.com)), mantido pela comunidade sob licença CC-BY-SA / MIT.
+Running Windows games on Linux can use the following tools.
+* **Proton (Valve / Wine):** Compatibility and DirectX translation through DXVK and VKD3D.
+* **Wine:** A Windows compatibility layer for Unix-like systems.
+* **Heroic / Legendary / GOGdl:** Community tools supporting Epic and GOG on Linux.
+
+---
+
+## 🛡️ Community compatibility and anti-cheat databases
+
+* **ProtonDB / Comunidade Proton:** Community compatibility reports and ratings for Proton ([protondb.com](https://www.protondb.com)).
+* **AreWeAntiCheatYet:** Open catalog of anti-cheat support across Linux, Wine, and Proton ([areweanticheatyet.com](https://areweanticheatyet.com)), mantido pela comunidade sob licença CC-BY-SA / MIT.
 

@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"io"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -11,11 +12,14 @@ import (
 	"github.com/playnux/core/models"
 	"github.com/playnux/core/runner/gameproc"
 	"github.com/playnux/core/store/builtins/heroic"
+	"github.com/playnux/core/store/builtins/steam"
 )
 
 type GameRuntime struct {
 	Configured string `json:"configured"`
+	Automatic  string `json:"automatic"`
 	Running    string `json:"running"`
+	LastUsed   string `json:"last_used,omitempty"`
 }
 
 func (c *App) GameRuntime(ctx context.Context, id string) (GameRuntime, error) {
@@ -23,7 +27,11 @@ func (c *App) GameRuntime(ctx context.Context, id string) (GameRuntime, error) {
 	if err != nil {
 		return GameRuntime{}, err
 	}
-	result := GameRuntime{Configured: c.configuredRunner(ctx, game)}
+	automatic := automaticRunner(game)
+	result := GameRuntime{Configured: c.configuredRunner(ctx, game, automatic), Automatic: automatic}
+	if game.PluginID == "steam" {
+		result.LastUsed = lastSteamProton(game)
+	}
 	for _, process := range gameproc.NewScanner().List() {
 		if !process.Zombie && gameproc.Match(game, process) {
 			if name := processRunner(process); name != "" {
@@ -39,20 +47,151 @@ func configuredRuntime(game *models.Game) string {
 	switch game.PluginID {
 	case "steam":
 		if name := steamRuntimeOverride(game.GameID); name != "" {
-			return name
+			return steamToolLabel(name)
 		}
-		return "Padrão da Steam"
+		switch installedPlatform(game) {
+		case "linux":
+			return "Linux nativo"
+		case "windows":
+			if name := steamRuntimeOverride("0"); name != "" {
+				return steamToolLabel(name) + " (preferência global)"
+			}
+			return "Windows · Proton escolhido pela Steam ao iniciar"
+		}
+		return "Steam · modo ainda não identificado"
 	case "gog", "epic":
 		if install := heroic.InstallFor(game.GameID); install != nil {
+			if strings.EqualFold(install.Platform, "linux") {
+				return "Linux nativo"
+			}
 			if name := strings.TrimSpace(install.WineName); name != "" {
 				return name
 			}
 			if name := runnerFromPath(install.WineBinary); name != "" {
 				return name
 			}
+			if strings.EqualFold(install.Platform, "windows") {
+				return "Windows · runner gerenciado pelo cliente"
+			}
+		}
+		switch installedPlatform(game) {
+		case "linux":
+			return "Linux nativo"
+		case "windows":
+			return "Windows · runner gerenciado pelo cliente"
 		}
 	case "linux":
-		return runnerFromPath(game.Executable)
+		if name := runnerFromPath(game.Executable); name != "" {
+			return name
+		}
+		return "Linux nativo"
+	case "emulation":
+		return "Emulador"
+	}
+	return ""
+}
+
+func installedPlatform(game *models.Game) string {
+	if !game.IsInstalled || game.InstallDirectory == "" {
+		return ""
+	}
+	var linux, windows bool
+	_ = filepath.WalkDir(game.InstallDirectory, func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		if entry.IsDir() {
+			relative, _ := filepath.Rel(game.InstallDirectory, path)
+			if relative != "." && strings.Count(relative, string(filepath.Separator)) >= 2 {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !entry.Type().IsRegular() {
+			return nil
+		}
+		name := strings.ToLower(entry.Name())
+		for _, helper := range []string{"crash", "setup", "unins", "redist", "vcredist", "steamerror"} {
+			if strings.Contains(name, helper) {
+				return nil
+			}
+		}
+		switch {
+		case strings.HasSuffix(name, ".exe"):
+			windows = windows || hasSignature(path, "MZ")
+		case !strings.Contains(name, ".so") && !strings.HasSuffix(name, ".dll"):
+			if info, err := entry.Info(); err == nil && info.Mode().Perm()&0111 != 0 {
+				linux = linux || hasSignature(path, "\x7fELF")
+			}
+		}
+		if linux && windows {
+			return filepath.SkipAll
+		}
+		return nil
+	})
+	if linux && !windows {
+		return "linux"
+	}
+	if windows && !linux {
+		return "windows"
+	}
+	return ""
+}
+
+func hasSignature(path, signature string) bool {
+	file, err := os.Open(path)
+	if err != nil {
+		return false
+	}
+	defer file.Close()
+	header := make([]byte, len(signature))
+	_, err = io.ReadFull(file, header)
+	return err == nil && string(header) == signature
+}
+
+var steamToolVersion = regexp.MustCompile(`^proton_(\d+)(?:[._](\d+))?$`)
+
+func steamToolLabel(name string) string {
+	lower := strings.ToLower(name)
+	if strings.HasPrefix(lower, "steamlinuxruntime") {
+		return "Linux nativo · Steam Linux Runtime"
+	}
+	switch lower {
+	case "proton_experimental", "proton - experimental":
+		return "Proton Experimental"
+	case "proton_hotfix", "proton - hotfix":
+		return "Proton Hotfix"
+	}
+	if parts := steamToolVersion.FindStringSubmatch(lower); parts != nil {
+		minor := parts[2]
+		if minor == "" {
+			minor = "0"
+		}
+		return "Proton " + parts[1] + "." + minor
+	}
+	return strings.TrimSuffix(strings.TrimSuffix(name, "-x86_64"), "-arm64")
+}
+
+func lastSteamProton(game *models.Game) string {
+	if _, err := strconv.ParseUint(game.GameID, 10, 32); err != nil {
+		return ""
+	}
+	for _, library := range steam.LibraryDirectories() {
+		path := filepath.Join(library, "compatdata", game.GameID, "config_info")
+		info, err := os.Stat(path)
+		if err != nil || !info.Mode().IsRegular() || info.Size() > 32<<10 {
+			continue
+		}
+		if data, err := os.ReadFile(path); err == nil {
+			for _, line := range strings.Split(string(data), "\n") {
+				marker := strings.Index(line, "/files/")
+				if marker > 0 {
+					if name := runnerFromPath(line[:marker]); name != "" {
+						return steamToolLabel(name)
+					}
+				}
+			}
+		}
 	}
 	return ""
 }
@@ -113,12 +252,8 @@ func steamRuntimeOverride(appID string) string {
 	if _, err := strconv.ParseUint(appID, 10, 32); err != nil {
 		return ""
 	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return ""
-	}
-	for _, root := range []string{".local/share/Steam", ".steam/steam", ".var/app/com.valvesoftware.Steam/.local/share/Steam"} {
-		path := filepath.Join(home, root, "config", "config.vdf")
+	for _, root := range steam.Roots() {
+		path := filepath.Join(root, "config", "config.vdf")
 		info, err := os.Stat(path)
 		if err != nil || !info.Mode().IsRegular() || info.Size() > 8<<20 {
 			continue

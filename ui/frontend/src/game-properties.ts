@@ -1,15 +1,18 @@
+import { language, t } from "./i18n";
 import { Browser } from "@wailsio/runtime";
 import * as Host from "../bindings/github.com/playnux/ui/host/host.js";
 import type { Game } from "../bindings/github.com/playnux/core/models/models.js";
 import type { WebImage } from "../bindings/github.com/playnux/core/metadata/models.js";
 import type { ArtworkField } from "./game-information";
 import { sourceLabel } from "./format";
-import { openProtonReports } from "./plugins/protondb";
+import { hasProtonReports, officialProtonDownloads, openProtonReports, protonDownload, recommendationText, runnerMatches, runtimeLabel, type ProtonIntelligence } from "./plugins/protondb";
+import type { Runner } from "../bindings/github.com/playnux/core/runner/wine/models.js";
 
 export type PropertiesTab = "general" | "artwork" | "launch";
 
 interface Options {
   error: (error: unknown) => string;
+  recordGameError: (game: string, action: string, message: string) => void;
   onGameUpdated: (game: Game) => void;
   toast: (message: string, isError?: boolean) => void;
 }
@@ -21,7 +24,7 @@ interface RunnerSelection {
 
 function element<T extends HTMLElement>(id: string): T {
   const node = document.getElementById(id);
-  if (!node) throw new Error(`Elemento ausente: ${id}`);
+  if (!node) throw new Error(t("Missing element {0}", id));
   return node as T;
 }
 
@@ -36,13 +39,6 @@ function dateValue(value: string | null | undefined): string {
   if (!value) return "";
   const match = /^\d{4}-\d{2}-\d{2}/.exec(value);
   return match ? match[0] : "";
-}
-
-function manualWindowsPath(game: Game): string {
-  const path = game.game_id.startsWith("manual:")
-    ? game.game_id.slice("manual:".length)
-    : game.executable || "";
-  return path.toLowerCase().endsWith(".exe") ? path : "";
 }
 
 export function setupGameProperties(options: Options) {
@@ -71,22 +67,15 @@ export function setupGameProperties(options: Options) {
   // ── Cabeçalho ────────────────────────────────────────────────────────────
   function refreshHeader(): void {
     if (!game) return;
-    const target = game;
     const image = game.cover_image || game.background_image || "";
     cover.hidden = !image;
     if (image) cover.src = image;
     else cover.removeAttribute("src");
     gameName.textContent = game.name;
-    gameMeta.textContent = [sourceLabel(game), game.is_installed ? "Instalado" : "Não instalado"]
+    gameMeta.textContent = [sourceLabel(game), game.is_installed ? t("Installed") : t("Not installed")]
       .filter(Boolean)
       .join(" · ");
-    runtimeBadge.hidden = true;
-    void Host.GetGameRuntime(game.id).then((runtime) => {
-      if (game !== target || !dialog.open) return;
-      const value = runtime.running || runtime.configured;
-      runtimeBadge.hidden = !value;
-      runtimeBadge.textContent = runtime.running ? `Em execução · ${runtime.running}` : `Runner · ${value}`;
-    }).catch(() => undefined);
+
   }
 
   // ── Geral ────────────────────────────────────────────────────────────────
@@ -147,7 +136,7 @@ export function setupGameProperties(options: Options) {
     if (!game || busy) return;
     const target = game;
     busy = true;
-    generalStatus.textContent = "Salvando…";
+    generalStatus.textContent = t("Saving…");
     void Host.SaveGameDetails(target.id, {
       name: name.value,
       description: description.value,
@@ -168,8 +157,8 @@ export function setupGameProperties(options: Options) {
       if (!updated || game !== target) return;
       applyGame(updated);
       fillGeneral();
-      generalStatus.textContent = "Metadados salvos.";
-      options.toast("Propriedades atualizadas.");
+      generalStatus.textContent = t("Metadata saved.");
+      options.toast(t("Properties updated."));
     }).catch((error) => {
       generalStatus.textContent = options.error(error);
     }).finally(() => {
@@ -182,15 +171,17 @@ export function setupGameProperties(options: Options) {
     const target = game;
     busy = true;
     metadataFetch.disabled = true;
-    generalStatus.textContent = "Buscando metadados…";
+    generalStatus.textContent = t("Fetching metadata…");
     void Host.GetMetadataSettings().then(async (settings) => {
       const updated = await Host.DownloadGameMetadata(target.id, settings.policy.sources, metadataMode.value);
       if (game !== target || !updated) return;
       applyGame(updated);
       fillGeneral();
-      generalStatus.textContent = "Metadados atualizados pelos provedores.";
+      generalStatus.textContent = t("Metadata updated from providers.");
     }).catch((error) => {
-      generalStatus.textContent = options.error(error);
+      const message = options.error(error);
+      generalStatus.textContent = message;
+      options.recordGameError(target.name, t("Metadata"), message);
     }).finally(() => {
       busy = false;
       metadataFetch.disabled = false;
@@ -208,9 +199,11 @@ export function setupGameProperties(options: Options) {
   const browserButton = element<HTMLButtonElement>("artwork-browser");
   const artworkSlots = dialog.querySelectorAll<HTMLButtonElement>("[data-artwork-field]");
   const currentArtwork = dialog.querySelectorAll<HTMLImageElement>("[data-current-art]");
-  const fieldLabels: Record<ArtworkField, string> = { cover: "capa", background: "banner", logo: "logotipo", icon: "ícone" };
+  const fieldLabels: Record<ArtworkField, string> = { cover: t("cover"), background: "banner", logo: t("logo"), icon: t("icon") };
   let artworkField: ArtworkField = "cover";
   const artworkFile = element<HTMLInputElement>("artwork-file");
+  const artworkURL = element<HTMLInputElement>("artwork-url");
+  const artworkURLField = element("artwork-url-field");
   const preview = element<HTMLImageElement>("artwork-preview");
   const artworkStatus = element<HTMLElement>("artwork-status");
   const queryInput = element<HTMLInputElement>("artwork-query");
@@ -229,7 +222,7 @@ export function setupGameProperties(options: Options) {
       return;
     }
     variantSelect.replaceChildren(...variants.map((variant) => {
-      const label = `${variant.source || variant.plugin_id}${variant.is_installed ? " · instalado" : ""}`;
+      const label = `${sourceLabel(variant)}${variant.is_installed ? ` · ${t("Installed")}` : ""}`;
       return new Option(label, variant.id);
     }));
     variantSelect.value = game?.id ?? variants[0].id;
@@ -242,13 +235,13 @@ export function setupGameProperties(options: Options) {
     if (!sourceID) return;
     busy = true;
     variantButton.disabled = true;
-    artworkStatus.textContent = "Aplicando imagens da origem escolhida…";
+    artworkStatus.textContent = t("Applying artwork from the selected source…");
     void Host.CopyGameArtwork(target.id, sourceID).then((updated) => {
       if (!updated || game !== target) return;
       applyGame(updated);
       fillVariants();
       refreshCurrentArtwork();
-      artworkStatus.textContent = "Imagens da origem aplicadas.";
+      artworkStatus.textContent = t("Artwork applied from the selected source.");
     }).catch((error) => {
       artworkStatus.textContent = options.error(error);
     }).finally(() => {
@@ -278,10 +271,13 @@ export function setupGameProperties(options: Options) {
     searchButton.disabled = false;
     const label = fieldLabels[artworkField];
     const google = sourceSelect.value === "google";
-    searchTitle.textContent = `Buscar ${label}`;
+    searchTitle.textContent = t("Search for {0}", label);
     queryInput.value = game ? (google ? `${game.name} ${label}` : game.name) : "";
     browserButton.hidden = !google;
     providerButton.hidden = google;
+    artworkURLField.hidden = !google;
+    artworkURL.disabled = !google;
+    artworkURL.value = "";
     artworkSlots.forEach((slot) => slot.setAttribute("aria-pressed", String(slot.dataset.artworkField === artworkField)));
     artworkStatus.textContent = "";
   }
@@ -290,8 +286,12 @@ export function setupGameProperties(options: Options) {
     if (previewURL) URL.revokeObjectURL(previewURL);
     const file = artworkFile.files?.[0];
     previewURL = file ? URL.createObjectURL(file) : "";
-    const src = previewURL || selectedImage?.image.thumbnail || "";
+    const src = previewURL || selectedImage?.image.url || selectedImage?.image.thumbnail || "";
     preview.hidden = !src;
+    preview.onerror = () => {
+      const thumbnail = selectedImage?.image.thumbnail;
+      if (thumbnail && thumbnail !== src && preview.getAttribute("src") !== thumbnail) preview.src = thumbnail;
+    };
     if (src) preview.src = src;
     else preview.removeAttribute("src");
   }
@@ -308,6 +308,13 @@ export function setupGameProperties(options: Options) {
     refreshPreview();
   });
   artworkFile.addEventListener("change", () => {
+    artworkURL.value = "";
+    selectedImage = null;
+    for (const control of imageResults.querySelectorAll("button")) control.setAttribute("aria-pressed", "false");
+    refreshPreview();
+  });
+  artworkURL.addEventListener("input", () => {
+    artworkFile.value = "";
     selectedImage = null;
     for (const control of imageResults.querySelectorAll("button")) control.setAttribute("aria-pressed", "false");
     refreshPreview();
@@ -321,7 +328,9 @@ export function setupGameProperties(options: Options) {
     imageResults.replaceChildren();
     refreshPreview();
     searchButton.disabled = true;
-    artworkStatus.textContent = "Buscando imagens…";
+    artworkStatus.textContent = sourceSelect.value === "google"
+      ? t("Searching Google Images. Complete any verification in the search window.")
+      : t("Searching for images…");
     try {
       const provider = sourceSelect.value;
       const results = (provider === "google"
@@ -338,22 +347,23 @@ export function setupGameProperties(options: Options) {
         const control = document.createElement("button");
         control.type = "button";
         control.className = "ghost-button";
-        control.setAttribute("aria-label", size ? `Selecionar imagem ${size}` : "Selecionar imagem");
+        control.setAttribute("aria-label", size ? t("Select image {0}", size) : t("Select image"));
         control.setAttribute("aria-pressed", "false");
         control.textContent = size;
         control.prepend(thumbnail);
         control.addEventListener("click", () => {
           selectedImage = { image: result, provider };
           artworkFile.value = "";
+          artworkURL.value = "";
           for (const other of imageResults.querySelectorAll("button")) {
             other.setAttribute("aria-pressed", String(control === other));
           }
           refreshPreview();
-          artworkStatus.textContent = "Imagem selecionada. Clique em Aplicar imagem para salvar.";
+          artworkStatus.textContent = t("Image selected. Choose Apply image to save it.");
         });
         imageResults.append(control);
       }
-      artworkStatus.textContent = results.length ? `${results.length} imagens encontradas.` : "Nenhuma imagem encontrada.";
+      artworkStatus.textContent = results.length ? t("{0} images found.", results.length) : t("No images found.");
     } catch (error) {
       if (request === imageSearch) artworkStatus.textContent = options.error(error);
     } finally {
@@ -371,8 +381,9 @@ export function setupGameProperties(options: Options) {
   browserButton.addEventListener("click", () => {
     const query = queryInput.value.trim();
     if (!query) return;
-    const url = `https://www.google.com/search?tbm=isch&q=${encodeURIComponent(query)}`;
-    void Browser.OpenURL(url).catch((error) => {
+    const params = new URLSearchParams({ udm: "2", q: query, hl: language, safe: "active" });
+    if (artworkField === "logo") params.set("tbs", "ic:trans");
+    void Browser.OpenURL(`https://www.google.com/search?${params}`).catch((error) => {
       artworkStatus.textContent = options.error(error);
     });
   });
@@ -381,12 +392,12 @@ export function setupGameProperties(options: Options) {
     const target = game;
     const field = artworkField;
     busy = true;
-    artworkStatus.textContent = "Buscando a melhor imagem…";
+    artworkStatus.textContent = t("Finding the highest-rated image…");
     void Host.ApplyProviderArtwork(target.id, field).then(() => Host.GetGame(target.id)).then((updated) => {
       if (!updated || game !== target) return;
       applyGame(updated);
       refreshCurrentArtwork();
-      artworkStatus.textContent = "Imagem aplicada.";
+      artworkStatus.textContent = t("Image applied.");
     }).catch((error) => {
       artworkStatus.textContent = options.error(error);
     }).finally(() => {
@@ -395,24 +406,28 @@ export function setupGameProperties(options: Options) {
   });
   artworkForm.addEventListener("submit", (event) => {
     event.preventDefault();
+    if (busy) return;
     const file = artworkFile.files?.[0];
     const target = game;
     const remote = selectedImage;
-    if (!target || (!file && !remote)) {
-      artworkStatus.textContent = "Selecione uma miniatura ou um arquivo.";
+    const url = artworkURL.disabled ? "" : artworkURL.value.trim();
+    if (!target || (!file && !remote && !url)) {
+      artworkStatus.textContent = artworkURL.disabled ? t("Select a thumbnail or a file.") : t("Select a thumbnail, paste a URL, or choose a file.");
       return;
     }
     if (file && file.size > 3 * 1024 * 1024) {
-      artworkStatus.textContent = "Selecione uma imagem de até 3 MB.";
+      artworkStatus.textContent = t("Choose an image up to 3 MB.");
       return;
     }
     const field = artworkField;
     busy = true;
-    artworkStatus.textContent = "Aplicando imagem…";
+    artworkStatus.textContent = t("Applying image…");
     void (async () => {
       if (remote) {
         if (remote.provider === "google") await Host.ApplyWebImage(target.id, field, remote.image);
         else await Host.ApplySteamGridImage(target.id, field, remote.image);
+      } else if (url) {
+        await Host.ApplyWebImage(target.id, field, { url, thumbnail: "", width: 0, height: 0 });
       } else if (file) {
         const encoded = await new Promise<string>((resolve, reject) => {
           const reader = new FileReader();
@@ -430,7 +445,7 @@ export function setupGameProperties(options: Options) {
       selectedImage = null;
       resetSearch();
       refreshPreview();
-      artworkStatus.textContent = "Imagem aplicada.";
+      artworkStatus.textContent = t("Image applied.");
     })().catch((error) => {
       artworkStatus.textContent = options.error(error);
     }).finally(() => {
@@ -450,166 +465,239 @@ export function setupGameProperties(options: Options) {
   const runtime = element<HTMLElement>("launch-runtime");
   const launchStatus = element<HTMLElement>("launch-status");
   const proton = element<HTMLButtonElement>("launch-protondb");
+  const steamProperties = element<HTMLButtonElement>("launch-steam-properties");
+  const download = element<HTMLButtonElement>("launch-proton-download");
+  const refreshRunners = element<HTMLButtonElement>("launch-runner-refresh");
+  const recommendation = element("launch-recommendation");
   const save = element<HTMLButtonElement>("launch-save");
-  let runners: { name: string; path: string; kind: string; recommended: boolean }[] = [];
+  const missingPrefix = "download:";
+  let runners: Runner[] = [];
   let windowsExecutable = "";
+  let automaticLabel = "";
+  let effectiveRuntime = "";
+  let reportedVersion = "";
+  let reportDetails: ProtonIntelligence | null | undefined;
+  let savedPath = "";
+  let launchGeneration = 0;
 
   function selectedRunner(): RunnerSelection {
-    const value = runnerSelect.value;
+    const value = runnerSelect.value || "auto";
     if (value === "auto" || value === "wine") return { runner: value, protonPath: "" };
     return { runner: "proton", protonPath: value };
   }
 
+  function missingVersion(): string {
+    return runnerSelect.value.startsWith(missingPrefix) ? runnerSelect.value.slice(missingPrefix.length) : "";
+  }
+
   function updateCommandPreview(): void {
     if (!game) return;
+    const missing = missingVersion();
     const choice = selectedRunner();
-    const extra = argumentsField.value.split("\n").map((arg) => arg.trim()).filter(Boolean);
-    const suffix = extra.length ? " " + extra.map((arg) => JSON.stringify(arg)).join(" ") : "";
-    const exe = windowsExecutable;
-    if (exe) {
-      // Store games default to their native client; manual games default to Proton.
-      const isManual = game.plugin_id === "linux";
-      const protonPath = choice.runner === "proton"
-        ? choice.protonPath
-        : choice.runner === "auto" && isManual
-          ? runners.find((item) => item.kind === "proton")?.path || ""
-          : "";
-      if (protonPath) {
-        commandPreview.textContent = `${JSON.stringify(protonPath)} run ${JSON.stringify(exe)}${suffix}`;
-        runnerHint.textContent = "O Proton usa um prefixo isolado do Playnux. A Steam e o Heroic não são alterados. O comando exato fica visível acima.";
-        return;
-      }
-      if (choice.runner === "wine") {
-        commandPreview.textContent = `wine ${JSON.stringify(exe)}${suffix}`;
-        runnerHint.textContent = "O Wine do sistema será usado diretamente, sem alterar o cliente da loja.";
-        return;
-      }
-      commandPreview.textContent = game.plugin_id === "linux"
-        ? `${game.executable || "wine"} ${JSON.stringify(exe)}${suffix}`
-        : `cliente nativo (${sourceLabel(game)}) — selecione um Proton para iniciar com Playnux`;
-      runnerHint.textContent = game.plugin_id === "linux"
-        ? "Nenhum Proton foi encontrado; o jogo .exe será iniciado com Wine do sistema."
-        : "Por padrão o jogo abre pelo cliente da loja. Escolha um Proton para usar o prefixo isolado do Playnux.";
+    const args = argumentsField.value.split("\n").map((arg) => arg.trim()).filter(Boolean);
+    const suffix = args.length ? " " + args.map((arg) => JSON.stringify(arg)).join(" ") : "";
+    const selectedProton = runners.find((item) => item.path === choice.protonPath);
+    const automaticProton = game.plugin_id === "linux" && windowsExecutable && choice.runner === "auto"
+      ? runners.find((item) => item.kind === "proton")
+      : undefined;
+    const protonPath = selectedProton?.path || automaticProton?.path;
+    download.hidden = refreshRunners.hidden = !missing;
+    save.disabled = localSettings.disabled || Boolean(missing) || (choice.runner !== "auto" && !windowsExecutable);
+    if (missing) {
+      download.textContent = protonDownload(missing).label;
+      commandPreview.textContent = t("Waiting for installation");
+      runnerHint.textContent = t("{0} was not found on this computer. Check installed runners after downloading it.", missing);
       return;
     }
-    commandPreview.textContent = `${game.executable || "—"}${suffix}`;
-    runnerHint.textContent = game.plugin_id === "emulation"
-      ? "Os argumentos acima são passados ao emulador escolhido para esta ROM."
-      : "Este jogo é nativo do Linux; o seletor Proton se aplica apenas a executáveis .exe.";
-  }
-
-  function fillRunners(): void {
-    const previous = savedRunner;
-    runnerSelect.replaceChildren();
-    const auto = document.createElement("option");
-    auto.value = "auto";
-    auto.textContent = "Automático (Proton se disponível)";
-    runnerSelect.append(auto);
-    const wine = document.createElement("option");
-    wine.value = "wine";
-    wine.textContent = "Wine do sistema";
-    runnerSelect.append(wine);
-    for (const runner of runners.filter((item) => item.kind === "proton")) {
-      const option = document.createElement("option");
-      option.value = runner.path;
-      option.textContent = runner.recommended ? `${runner.name} (recomendado)` : runner.name;
-      runnerSelect.append(option);
+    if (protonPath && windowsExecutable) {
+      commandPreview.textContent = `${JSON.stringify(protonPath)} run ${JSON.stringify(windowsExecutable)}${suffix}`;
+      runnerHint.textContent = t("Playnux starts the Windows executable in its own prefix. Choose Automatic to launch through the store client.");
+      return;
     }
-    runnerSelect.value = previous && [...runnerSelect.options].some((option) => option.value === previous) ? previous : "auto";
+    if (windowsExecutable && (choice.runner === "wine" || game.plugin_id === "linux")) {
+      commandPreview.textContent = `wine ${JSON.stringify(windowsExecutable)}${suffix}`;
+      runnerHint.textContent = t("System Wine");
+      return;
+    }
+
+    commandPreview.textContent = game.executable ? `${game.executable}${suffix}` : t("{0} client", sourceLabel(game));
+    runnerHint.textContent = automaticLabel.startsWith("Linux nativo")
+      ? t("The Linux installation uses native mode.")
+      : game.plugin_id === "emulation"
+        ? t("Additional arguments are passed to the emulator.")
+        : !windowsExecutable && game.is_installed
+          ? t("Select this installation's Windows executable to use Proton in Playnux.")
+          : t("The store client manages automatic launch.");
   }
 
-  let savedRunner = "auto";
+  function protonName(path: string): string {
+    return path.split("/").filter(Boolean).at(-2) || t("Saved Proton");
+  }
+
+  function runnerFor(version: string): Runner | undefined {
+    return runners.find((entry) => entry.kind === "proton" &&
+      (runnerMatches(version, entry.name) || runnerMatches(version, entry.version ?? "")));
+  }
+
+  function fillRunners(choice = runnerSelect.value): void {
+    const list = [new Option(automaticLabel ? t("Automatic · {0}", runtimeLabel(automaticLabel)) : t("Automatic · Store client"), "auto")];
+    if (windowsExecutable && runners.some((runner) => runner.kind === "wine")) {
+      list.push(new Option(t("System Wine"), "wine"));
+    }
+    for (const runner of runners) {
+      if (runner.kind !== "proton" || (!windowsExecutable && runner.path !== savedPath)) continue;
+      const version = runner.version && !runnerMatches(runner.version, runner.name) ? ` · ${runner.version}` : "";
+      list.push(new Option(runner.name + version, runner.path));
+    }
+
+    const missing = new Set<string>();
+    if (windowsExecutable && reportedVersion && !runnerFor(reportedVersion)) missing.add(reportedVersion);
+    if (windowsExecutable) {
+      for (const version of officialProtonDownloads.keys()) {
+        if (!runnerFor(version)) missing.add(version);
+      }
+    }
+    if (savedPath && !runners.some((entry) => entry.path === savedPath)) missing.add(protonName(savedPath));
+    if (missing.size) {
+      const group = document.createElement("optgroup");
+      group.label = t("Available to download");
+      group.append(...[...missing].map((version) => new Option(version, missingPrefix + version)));
+      runnerSelect.replaceChildren(...list, group);
+    } else {
+      runnerSelect.replaceChildren(...list);
+    }
+    if (choice.startsWith(missingPrefix)) {
+      choice = runnerFor(choice.slice(missingPrefix.length))?.path ?? choice;
+    } else if (choice === savedPath && savedPath && !runners.some((entry) => entry.path === savedPath)) {
+      choice = missingPrefix + protonName(savedPath);
+    }
+    runnerSelect.value = [...runnerSelect.options].some((entry) => entry.value === choice) ? choice : "auto";
+    runnerSelect.disabled = runnerSelect.options.length === 1;
+    updateCommandPreview();
+  }
 
   function fillLaunch(): void {
     if (!game) return;
     const target = game;
-    const native = game.plugin_id === "linux" || game.plugin_id === "emulation";
-    windowsExecutable = manualWindowsPath(game);
-    launchStatus.textContent = "";
+    const generation = ++launchGeneration;
+    const current = () => game === target && dialog.open && generation === launchGeneration;
+    const configurable = ["linux", "emulation", "steam", "gog", "epic"].includes(target.plugin_id);
+    windowsExecutable = "";
+    automaticLabel = "";
+    effectiveRuntime = "";
+    savedPath = "";
+    reportedVersion = "";
+    reportDetails = undefined;
+    runners = [];
+    directory.value = "";
+    argumentsField.value = "";
+    localSettings.disabled = true;
+    save.hidden = !configurable;
+    save.disabled = true;
+    download.hidden = refreshRunners.hidden = true;
+    runnerSelect.replaceChildren(new Option(t("Loading…"), "auto"));
     runtime.replaceChildren();
     runtime.hidden = true;
-    proton.hidden = !(game.plugin_id !== "emulation" && game.is_installed);
+    recommendation.hidden = true;
+    proton.hidden = steamProperties.hidden = !hasProtonReports(target);
+    launchProvider.textContent = configurable ? "" : t("Managed by {0}.", sourceLabel(target));
+    launchStatus.textContent = "";
+    commandPreview.textContent = "—";
 
-    void Host.GetGameRuntime(game.id).then((result) => {
-      if (game !== target || !dialog.open) return;
-      const rows = [["Runner configurado", result.configured], ["Runner em uso", result.running]].filter(([, value]) => value);
+    void Promise.all([
+      Host.GetGameRuntime(target.id),
+      Host.GetLaunchOptions(target.id),
+      configurable ? Host.GetCompatibilityRunners() : [],
+      configurable ? Host.GetWindowsExecutable(target.id) : "",
+    ]).then(([result, settings, installed, executable]) => {
+      if (!current()) return;
+      automaticLabel = result.automatic || result.configured;
+      effectiveRuntime = result.running || result.configured;
+      if (reportDetails !== undefined) recommendation.textContent = `ProtonDB · ${recommendationText(reportDetails, effectiveRuntime)}`;
+      const rows = [
+        [t("Configured"), result.configured],
+        [t("Running"), result.running],
+        [t("Proton last used by Steam"), result.last_used],
+      ];
       for (const [label, value] of rows) {
+        if (!label || !value) continue;
         const term = document.createElement("dt");
         const definition = document.createElement("dd");
         term.textContent = label;
-        definition.textContent = value;
+        definition.textContent = runtimeLabel(value);
         runtime.append(term, definition);
       }
-      runtime.hidden = rows.length === 0;
+      runtime.hidden = !runtime.childElementCount;
       const badge = result.running || result.configured;
       runtimeBadge.hidden = !badge;
-      runtimeBadge.textContent = result.running ? `Em execução · ${result.running}` : `Runner · ${badge}`;
-    }).catch(() => undefined);
-
-    // The Core resolves the Windows executable for store games too. This is
-    // what allows choosing an isolated Proton without touching Steam/Heroic.
-    const resolveExecutable = native
-      ? Promise.resolve(windowsExecutable)
-      : Host.GetWindowsExecutable(game.id).catch(() => "");
-
-    void resolveExecutable.then((exe) => {
-      if (game !== target || !dialog.open) return;
-      if (exe) windowsExecutable = exe;
-      const local = true;
+      runtimeBadge.textContent = result.running ? t("Running · {0}", runtimeLabel(result.running)) : runtimeLabel(badge);
+      if (!configurable) return;
+      windowsExecutable = executable;
+      runners = installed ?? [];
+      directory.value = settings.directory || "";
+      argumentsField.value = (settings.arguments ?? []).join("\n");
+      savedPath = settings.proton_path || "";
       localSettings.disabled = false;
-      runnerSelect.disabled = !windowsExecutable;
-      save.hidden = false;
-      launchProvider.textContent = windowsExecutable
-        ? "Configure o executável, argumentos e escolha o motor de compatibilidade (Proton ou Wine isolado do Playnux)."
-        : native
-          ? "O Playnux inicia este jogo diretamente. Ajuste abaixo os argumentos e opções de inicialização."
-          : `Gerenciado por ${sourceLabel(game)}. Você pode passar argumentos adicionais ou configurar um executável/runner personalizado.`;
-      if (!local) {
-        updateCommandPreview();
-        return;
-      }
-      // Load runners before restoring the saved choice: otherwise the <select>
-      // stays on "auto" and looks like the Proton option was not saved.
-      const loadRunners = Host.GetCompatibilityRunners().then((list) => { runners = list ?? []; fillRunners(); });
-      void loadRunners.then(() => Host.GetLaunchOptions(target.id)).then((settings) => {
-        if (game !== target || !dialog.open) return;
-        directory.value = settings.directory || "";
-        argumentsField.value = (settings.arguments ?? []).join("\n");
-        const choice = settings.runner === "proton" ? settings.proton_path || "auto" : settings.runner === "wine" ? "wine" : "auto";
-        savedRunner = choice;
-        if ([...runnerSelect.options].some((option) => option.value === choice)) runnerSelect.value = choice;
-        if (!settings.runner) runnerSelect.value = "auto";
-        updateCommandPreview();
-      });
+      fillRunners(settings.runner === "proton" ? savedPath : settings.runner || "auto");
     }).catch((error) => {
-      launchStatus.textContent = options.error(error);
+      if (current()) launchStatus.textContent = options.error(error);
     });
+
+    if (hasProtonReports(target)) {
+      void Host.GetGameCompatibility(target.id).then(({ protondb }) => {
+        if (!current()) return;
+        reportDetails = protondb ?? null;
+        recommendation.hidden = false;
+        recommendation.textContent = `ProtonDB · ${recommendationText(protondb, effectiveRuntime)}`;
+        reportedVersion = protondb?.recommended ?? "";
+        if (!localSettings.disabled) fillRunners();
+      }).catch(() => undefined);
+    }
   }
 
-  runnerSelect.addEventListener("change", () => {
-    savedRunner = runnerSelect.value;
-    updateCommandPreview();
+  download.addEventListener("click", () => {
+    const version = missingVersion();
+    if (version) void Browser.OpenURL(protonDownload(version).url).catch((error) => {
+      launchStatus.textContent = options.error(error);
+    });
   });
+  refreshRunners.addEventListener("click", () => {
+    const generation = launchGeneration;
+    refreshRunners.disabled = true;
+    void Host.GetCompatibilityRunners().then((installed) => {
+      if (generation !== launchGeneration) return;
+      runners = installed ?? [];
+      fillRunners();
+    }).catch((error) => {
+      if (generation === launchGeneration) launchStatus.textContent = options.error(error);
+    }).finally(() => { refreshRunners.disabled = false; });
+  });
+  runnerSelect.addEventListener("change", updateCommandPreview);
   argumentsField.addEventListener("input", updateCommandPreview);
   launchForm.addEventListener("submit", (event) => {
     event.preventDefault();
-    if (!game || busy || launchForm.querySelector("fieldset")?.disabled) return;
+    if (!game || busy || localSettings.disabled || save.disabled || missingVersion()) return;
     const target = game;
     const choice = selectedRunner();
     const args = argumentsField.value.split("\n").map((arg) => arg.trim()).filter(Boolean);
     busy = true;
     save.disabled = true;
-    launchStatus.textContent = "Salvando…";
+    launchStatus.textContent = t("Saving…");
     void Host.SaveLaunchOptions(target.id, directory.value, args, choice.runner, choice.protonPath).then(() => {
       if (game !== target) return;
-      launchStatus.textContent = "Inicialização salva.";
-      options.toast("Inicialização atualizada.");
+      options.toast(t("Launch options updated."));
       fillLaunch();
     }).catch((error) => {
       launchStatus.textContent = options.error(error);
     }).finally(() => {
       busy = false;
-      save.disabled = false;
+      updateCommandPreview();
+    });
+  });
+  steamProperties.addEventListener("click", () => {
+    if (!game || !hasProtonReports(game)) return;
+    void Browser.OpenURL(`steam://gameproperties/${game.game_id}/compatibility`).catch((error) => {
+      launchStatus.textContent = options.error(error);
     });
   });
   proton.addEventListener("click", () => {
@@ -623,6 +711,7 @@ export function setupGameProperties(options: Options) {
   close.addEventListener("click", () => dialog.close());
   dialog.addEventListener("close", () => {
     game = null;
+    launchGeneration++;
     busy = false;
     artworkForm.reset();
     launchForm.reset();
@@ -639,6 +728,7 @@ export function setupGameProperties(options: Options) {
       if (busy) return;
       game = target;
       fillGeneral();
+      runtimeBadge.hidden = true;
       fillLaunch();
       fillVariants();
       refreshCurrentArtwork();

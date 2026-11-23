@@ -4,10 +4,6 @@ package database
 // Já nasce completo, espelhando os campos reais do Playnite, com índices rápidos
 // para busca instantânea e suporte a WAL (Write-Ahead Logging).
 const SchemaSQL = `
-PRAGMA journal_mode = WAL;
-PRAGMA synchronous = NORMAL;
-PRAGMA foreign_keys = ON;
-
 -- Tabela Principal de Jogos
 CREATE TABLE IF NOT EXISTS games (
     id                  TEXT PRIMARY KEY,

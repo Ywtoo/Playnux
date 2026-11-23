@@ -1,5 +1,55 @@
+<form id="emulation-scan-form">
+  <fieldset class="desktop-group">
+    <legend>Scan a ROM folder</legend>
+    <p>Choose a folder and profile. Future scans use the saved profile.</p>
+    <label for="emulation-folder">Folder</label>
+    <div class="path-row">
+      <input id="emulation-folder" type="text" placeholder="~/ROMs/ps2" autocomplete="off" spellcheck="false" required>
+      <button type="button" class="ghost-button" id="emulation-browse">Browse…</button>
+    </div>
+    <label class="field" for="emulation-profile">Profile
+      <select id="emulation-profile" required disabled></select>
+    </label>
+    <div class="desktop-actions">
+      <button type="submit" class="primary-button" id="emulation-scan" disabled>Scan ROMs</button>
+    </div>
+    <p id="emulation-status" class="properties-status" role="status"></p>
+  </fieldset>
+</form>
+<div id="emulation-folders" class="emulation-list"></div>
 <fieldset class="desktop-group">
-  <legend>Pastas de ROMs</legend>
-  <p>As ROMs encontradas nessas pastas são associadas aos emuladores detectados no computador.</p>
-  <button type="button" class="ghost-button" data-plugin-folders="rom">Configurar pastas…</button>
+  <legend>Installed emulators and profiles</legend>
+  <div id="emulation-list" class="emulation-list" aria-live="polite"></div>
+</fieldset>
+<fieldset class="desktop-group">
+  <legend>Add an emulator manually</legend>
+  <form id="emulator-form" class="emulator-form">
+    <div class="emulator-grid">
+      <label class="field">Name
+        <input id="emulator-name" type="text" required maxlength="120" placeholder="My emulator">
+      </label>
+      <label class="field">Executable (name or path)
+        <input id="emulator-executable" type="text" placeholder="/usr/bin/emulator">
+      </label>
+      <label class="field">Or a Flatpak ID
+        <input id="emulator-flatpak" type="text" placeholder="org.example.Emulator">
+      </label>
+      <label class="field">Profile
+        <input id="emulator-profile-name" type="text" required placeholder="Fast / Fullscreen">
+      </label>
+      <label class="field">Platform
+        <input id="emulator-platform" type="text" required placeholder="PlayStation 2">
+      </label>
+      <label class="field">Extensions
+        <input id="emulator-extensions" type="text" required placeholder="iso, chd, bin">
+      </label>
+      <label class="field field-wide">Arguments
+        <input id="emulator-args" type="text" value="&#34;{ImagePath}&#34;" spellcheck="false">
+      </label>
+    </div>
+    <div class="desktop-actions">
+      <button type="submit" class="primary-button">Save emulator</button>
+    </div>
+    <p id="emulator-status" class="properties-status" role="status"></p>
+  </form>
 </fieldset>

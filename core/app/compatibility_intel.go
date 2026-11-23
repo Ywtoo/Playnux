@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"strconv"
+	"strings"
 
 	"github.com/playnux/core/metadata/anticheat"
 	"github.com/playnux/core/metadata/protondb"
@@ -33,6 +34,11 @@ func (c *App) GameCompatibility(ctx context.Context, id string) (GameCompatibili
 					AppID: game.GameID,
 					URL:   "https://www.protondb.com/app/" + game.GameID,
 					Error: fetchErr.Error(),
+				}
+			}
+			for _, platform := range game.Platforms {
+				if strings.EqualFold(strings.TrimSpace(platform), "linux") {
+					intel.NativeAvailable = true
 				}
 			}
 			result.ProtonDB = &intel
