@@ -12,6 +12,8 @@
   "ADD GAME": "ADICIONAR JOGO",
   "API key": "Chave da API",
   "API key (owned games)": "Chave da API (biblioteca comprada)",
+  "Get a Steam Web API key": "Obter chave da Steam",
+  "SteamID64 is enough to import installed games. Add a Steam Web API key to import owned games through the Steam API.": "O SteamID64 é suficiente para importar jogos instalados. Adicione uma chave da Steam Web API para importar seus jogos comprados pela API da Steam.",
   "About the game": "Sobre o jogo",
   "Account connected": "Conta conectada",
   "Account connected. {0} games imported.": "Conta conectada. {0} jogos importados.",

@@ -1,3 +1,4 @@
+import { Browser } from "@wailsio/runtime";
 import { t } from "../../i18n";
 import * as Host from "../../../bindings/github.com/playnux/ui/host/host.js";
 import type { SettingsContext, SettingsProperty } from "../settings";
@@ -6,6 +7,11 @@ export function setup(root: HTMLElement, context: SettingsContext): void {
   const account = root.querySelector<HTMLFormElement>("[data-steam-account]");
   const steamID = root.querySelector<HTMLInputElement>("#steam-id");
   const detectSteam = root.querySelector<HTMLButtonElement>("[data-steam-detect]");
+  root.querySelector("[data-steam-api-page]")?.addEventListener("click", () => {
+    void Browser.OpenURL("https://steamcommunity.com/dev/apikey").catch((error) => {
+      context.report(context.error(error), true);
+    });
+  });
   if (steamID) steamID.value = context.store.account_id ?? "";
   if (steamID && !steamID.value) {
     void Host.DetectSteamID().then((id) => {

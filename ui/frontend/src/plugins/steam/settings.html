@@ -1,7 +1,7 @@
 <form data-steam-account>
   <fieldset class="desktop-group">
     <legend>Steam account</legend>
-    <p>O SteamID64 importa os jogos instalados. A chave da Steam Web API permite importar também os jogos comprados que ainda não foram instalados.</p>
+    <p>SteamID64 is enough to import installed games. Add a Steam Web API key to import owned games through the Steam API.</p>
     <div class="desktop-fields">
       <label for="steam-id">SteamID64</label>
       <div class="path-row">
@@ -9,7 +9,10 @@
         <button type="button" class="ghost-button" data-steam-detect>Use this PC’s account</button>
       </div>
       <label for="steam-api-key">API key (owned games)</label>
-      <input id="steam-api-key" name="key" type="password" autocomplete="off" placeholder="Leave blank to keep the saved key">
+      <div class="path-row">
+        <input id="steam-api-key" name="key" type="password" autocomplete="off" placeholder="Leave blank to keep the saved key">
+        <button type="button" class="ghost-button" data-steam-api-page>Get a Steam Web API key</button>
+      </div>
     </div>
     <label class="plugin-checkbox"><input type="checkbox" name="clearKey"> Remove saved key</label>
     <div class="desktop-actions">
