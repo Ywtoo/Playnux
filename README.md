@@ -112,8 +112,6 @@ With `wails3` on your `PATH`, `make build` creates `bin/playnux`. `make package-
 Playnux is free and open source, and it is built and maintained by one person in their spare time. If it is useful to you, a donation helps me keep working on it and cover future hosting costs.
 
 - [GitHub Sponsors](https://github.com/sponsors/Ywtoo)
-- [Ko-fi](https://ko-fi.com/your-username)
-- Pix (Brazil): `your-pix-key`
 
 Not able to donate? Starring the repository, reporting bugs, and sharing Playnux with other Linux gamers helps just as much.
 
