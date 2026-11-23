@@ -2,6 +2,8 @@
 
 Playnux brings your games together on Linux. Browse your library in list, grid, or Big Picture mode, launch installed games, and see community compatibility reports alongside their artwork and trailers.
 
+Playnux was written from scratch. Playnite's source code was consulted as a reference for the library architecture, data models, and features.
+
 ![Playnux game details](docs/screenshots/details.png)
 
 | Cover grid | Big Picture |

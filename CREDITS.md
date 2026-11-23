@@ -6,11 +6,22 @@
 
 ## 🎮 Playnite (architecture and metadata concepts)
 
-Playnux draws on the data models, game metadata fields, and unified library concepts developed by **Josef Nemec** for **Playnite**.
+Playnux was written from scratch and inspired by **Playnite**, created by **Josef Nemec**. Playnite's source code was consulted as a reference for the library architecture, data models, metadata fields, and features.
 
 * **Original author:** Josef Nemec
 * **Repository:** [https://github.com/JosefNemec/Playnite](https://github.com/JosefNemec/Playnite)
 * **License:** MIT License
+
+---
+
+## 🔌 Plugin and store integration references (PlayniteExtensions)
+
+The library synchronization flows for **Steam, GOG, Epic Games, and Xbox** reference the official Playnite extensions maintained by the Playnite community under the MIT license.
+
+* **Repository:** [https://github.com/JosefNemec/PlayniteExtensions](https://github.com/JosefNemec/PlayniteExtensions)
+* **License:** MIT License
+
+### MIT notice for Playnite and PlayniteExtensions
 
 ```text
 MIT License
@@ -26,17 +37,15 @@ furnished to do so, subject to the following conditions:
 
 The above copyright notice and this permission notice shall be included in all
 copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
 ```
-
----
-
-## 🔌 plugin and store integration references (PlayniteExtensions)
-
-The library synchronization flows for **Steam, GOG, Epic Games, and Xbox** reference the official Playnite extensions maintained by the Playnite community under the MIT license.
-
-* **Repository:** [https://github.com/JosefNemec/PlayniteExtensions](https://github.com/JosefNemec/PlayniteExtensions)
-* **License:** MIT License
-* **Copyright:** (c) Josef Nemec and Playnite contributors
 
 ---
 
